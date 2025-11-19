@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { BookOpen, MessageSquare, Plus, Edit2, Trash2, Search, LogOut, Menu, X, BarChart3, Clock, Save } from 'lucide-react'
+import { BookOpen, MessageSquare, Plus, Edit2, Trash2, Search, LogOut, Menu, X, BarChart3, Clock, Save, AlertTriangle } from 'lucide-react'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -18,6 +18,13 @@ export default function AdminPage() {
   const [listaCategorias, setListaCategorias] = useState(['Titulación', 'Matrícula', 'Disciplinario', 'Financiero', 'Académico'])
   const [showModalCategoria, setShowModalCategoria] = useState(false)
   const [nuevaCategoriaInput, setNuevaCategoriaInput] = useState('')
+
+  // ESTADO PARA EL MODAL DE BORRADO (NUEVO)
+  const [deleteModal, setDeleteModal] = useState({ 
+    show: false, 
+    type: null, // 'single' o 'all'
+    id: null 
+  })
 
   // Formulario
   const [editingId, setEditingId] = useState(null)
@@ -51,17 +58,16 @@ export default function AdminPage() {
     const { data: regs } = await supabase.from('base_conocimiento').select('*').order('id', { ascending: false })
     if (regs) {
       setReglamentos(regs)
-      // B. Truco: Extraer categorías únicas que ya existen en la BD para añadirlas a la lista
       const categoriasUsadas = [...new Set(regs.map(r => r.categoria).filter(Boolean))]
       setListaCategorias(prev => [...new Set([...prev, ...categoriasUsadas])])
     }
 
     // C. Cargar Logs
-    const { data: logsData } = await supabase.from('logs_consultas').select('*').order('fecha', { ascending: false }).limit(10)
+    const { data: logsData } = await supabase.from('logs_consultas').select('*').order('fecha', { ascending: false })
     if (logsData) setLogs(logsData)
   }
 
-  // 2. Funciones del Formulario
+  // 2. Funciones del Formulario (Reglamentos)
   const handleSaveReglamento = async () => {
     if (!formData.titulo || !formData.categoria || !formData.contenido) {
       alert('Por favor complete todos los campos')
@@ -102,6 +108,39 @@ export default function AdminPage() {
     }
   }
 
+  // --- NUEVA LÓGICA DE BORRADO CON MODAL ---
+  
+  // 1. Abrir modal para UN log
+  const solicitarBorrarLog = (id) => {
+    setDeleteModal({ show: true, type: 'single', id: id })
+  }
+
+  // 2. Abrir modal para TODOS los logs
+  const solicitarVaciarHistorial = () => {
+    setDeleteModal({ show: true, type: 'all', id: null })
+  }
+
+  // 3. Ejecutar la acción cuando el usuario confirma en el modal
+  const confirmarBorrado = async () => {
+    // Estado de carga en botón podría ir aquí, pero por simpleza lo hacemos directo
+    if (deleteModal.type === 'single') {
+      const { error } = await supabase.from('logs_consultas').delete().eq('id', deleteModal.id)
+      if (!error) cargarDatos()
+    } 
+    else if (deleteModal.type === 'all') {
+      const { error } = await supabase.from('logs_consultas').delete().gt('id', 0)
+      if (!error) {
+        setMensajeSistema('Historial vaciado correctamente')
+        cargarDatos()
+        setTimeout(() => setMensajeSistema(null), 3000)
+      }
+    }
+    // Cerrar modal
+    setDeleteModal({ show: false, type: null, id: null })
+  }
+
+  // --- FIN LÓGICA NUEVA ---
+
   // 3. Funciones para Nueva Categoría
   const handleSelectChange = (e) => {
     const valor = e.target.value
@@ -114,11 +153,8 @@ export default function AdminPage() {
 
   const guardarNuevaCategoria = () => {
     if (!nuevaCategoriaInput.trim()) return
-    // Agregamos a la lista visual
     setListaCategorias(prev => [...prev, nuevaCategoriaInput])
-    // La seleccionamos en el formulario
     setFormData({ ...formData, categoria: nuevaCategoriaInput })
-    // Cerramos modal
     setShowModalCategoria(false)
     setNuevaCategoriaInput('')
   }
@@ -132,10 +168,52 @@ export default function AdminPage() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans relative">
-      {/* MODAL DE NUEVA CATEGORÍA */}
+      
+      {/* --- MODAL DE CONFIRMACIÓN DE BORRADO (NUEVO DISEÑO) --- */}
+      {deleteModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all scale-100">
+            
+            {/* Cabecera del Modal */}
+            <div className="bg-red-50 p-6 flex flex-col items-center text-center border-b border-red-100">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4 animate-bounce-slow">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800">
+                {deleteModal.type === 'all' ? '¿Vaciar todo el historial?' : '¿Eliminar consulta?'}
+              </h3>
+              <p className="text-gray-500 text-sm mt-2 px-4">
+                {deleteModal.type === 'all' 
+                  ? 'Esta acción eliminará permanentemente TODAS las consultas registradas. No podrás deshacer esto.' 
+                  : 'Esta acción eliminará este registro permanentemente de la base de datos.'}
+              </p>
+            </div>
+
+            {/* Botones */}
+            <div className="p-4 flex gap-3 bg-gray-50">
+              <button 
+                onClick={() => setDeleteModal({ show: false, type: null, id: null })}
+                className="flex-1 px-4 py-3 bg-white text-gray-700 font-semibold rounded-xl border border-gray-300 hover:bg-gray-100 transition shadow-sm"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmarBorrado}
+                className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition shadow-lg shadow-red-200 flex justify-center items-center gap-2"
+              >
+                <Trash2 size={18} />
+                {deleteModal.type === 'all' ? 'Sí, Vaciar Todo' : 'Sí, Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- FIN MODAL DE BORRADO --- */}
+
+      {/* MODAL DE NUEVA CATEGORÍA (El que ya tenías) */}
       {showModalCategoria && (
-        <div className="fixed inset-0 bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl animate-fade-in-up">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
             <h3 className="text-lg font-bold mb-4 text-gray-800">Agregar Nueva Categoría</h3>
             <input 
               autoFocus
@@ -143,21 +221,11 @@ export default function AdminPage() {
               value={nuevaCategoriaInput}
               onChange={(e) => setNuevaCategoriaInput(e.target.value)}
               placeholder="Ej: Becas, Vinculación..."
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-4"
+              className="text-black w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-4"
             />
             <div className="flex gap-2 justify-end">
-              <button 
-                onClick={() => setShowModalCategoria(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={guardarNuevaCategoria}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Agregar
-              </button>
+              <button onClick={() => setShowModalCategoria(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={guardarNuevaCategoria} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Agregar</button>
             </div>
           </div>
         </div>
@@ -259,6 +327,7 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* VISTA: FORMULARIO */}
           {currentView === 'nuevo' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-3xl mx-auto">
               <div className="space-y-6">
@@ -269,20 +338,12 @@ export default function AdminPage() {
                 
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Categoría</label>
-                  <select 
-                    value={formData.categoria} 
-                    onChange={handleSelectChange} 
-                    className="text-black w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition bg-white"
-                  >
+                  <select value={formData.categoria} onChange={handleSelectChange} className="text-black w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition bg-white">
                     <option value="">Seleccionar categoría</option>
-                    
                     <option value="ADD_NEW" className="text-blue-600 font-bold">+ Nueva Categoría...</option>
-                    {/* Listamos las categorías dinámicas */}
                     {listaCategorias.map((cat, index) => (
                       <option key={index} value={cat}>{cat}</option>
                     ))}
-                    
-                    
                   </select>
                 </div>
                 
@@ -303,12 +364,23 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* VISTA: LOGS DE CONSULTAS (Esto es lo que te faltaba) */}
+          {/* VISTA: LOGS DE CONSULTAS */}
           {currentView === 'logs' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="p-4 border-b bg-gray-50 rounded-t-xl">
+              <div className="p-4 border-b bg-gray-50 rounded-t-xl flex justify-between items-center">
                 <h3 className="font-bold text-gray-700">Historial Reciente</h3>
+                
+                {/* BOTÓN VACIAR HISTORIAL (CON MODAL) */}
+                {logs.length > 0 && (
+                  <button 
+                    onClick={solicitarVaciarHistorial}
+                    className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition border border-transparent hover:border-red-200"
+                  >
+                    <Trash2 size={16} /> Vaciar Historial
+                  </button>
+                )}
               </div>
+
               <div className="divide-y divide-gray-100">
                 {logs.length === 0 ? (
                   <div className="p-10 text-center text-gray-500">
@@ -317,9 +389,18 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   logs.map((log) => (
-                    <div key={log.id} className="p-6 hover:bg-gray-50 transition">
+                    <div key={log.id} className="p-6 hover:bg-gray-50 transition relative group">
+                      {/* BOTÓN ELIMINAR INDIVIDUAL (CON MODAL) */}
+                      <button 
+                        onClick={() => solicitarBorrarLog(log.id)}
+                        className="absolute top-6 right-6 text-gray-400 hover:text-red-600 p-2 rounded-full hover:bg-white hover:shadow-md transition opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                        title="Eliminar registro"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+
                       <div className="flex flex-col gap-3">
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start pr-10">
                           <span className="bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-bold">
                             Estudiante
                           </span>
