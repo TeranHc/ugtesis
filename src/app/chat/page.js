@@ -220,7 +220,7 @@ export default function AsistenteFinalAzul() {
     const loader = new GLTFLoader();
     
     loader.load(
-      '/Maryprototipo2.glb', 
+      '/Maryprototipo3.glb', 
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1); 
