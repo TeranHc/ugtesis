@@ -318,11 +318,15 @@ export default function AsistenteFinalAzul() {
       if(window.speechSynthesis) window.speechSynthesis.cancel();
 
       try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: textToSend, userId: userId })
-        });
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            // 👇 AGREGA ESTA LÍNEA (Asegúrate de poner la clave real aquí o usar variable de entorno pública)
+            'x-secret-key': 'tesis-segura-2025-guayaquil-bloqueo' 
+        },
+        body: JSON.stringify({ message: textToSend, userId: userId })
+      });
         
         const data = await response.json();
         

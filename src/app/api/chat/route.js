@@ -4,10 +4,29 @@ import { NextResponse } from 'next/server'
 
 export async function POST(req) {
   try {
+    // ==========================================
+    // 🔒 PROTECCIÓN 0: CANDADO DE SEGURIDAD (NUEVO)
+    // ==========================================
+    // Verificamos si la petición trae la "contraseña" desde el Frontend.
+    // Si eres un bot de Vercel y no tienes la clave: TE BLOQUEAMOS AQUÍ (Costo 0).
+    const secretHeader = req.headers.get('x-secret-key')
+    
+    // Aquí usamos la clave que definimos. Si no has creado la variable en Vercel aún, 
+    // usará la frase fija por defecto para que te funcione ya.
+    const mySecret = process.env.APP_SECRET_KEY || 'tesis-segura-2025-guayaquil-bloqueo'
+
+    if (secretHeader !== mySecret) {
+       return NextResponse.json({ 
+         error: "Acceso denegado: No tienes autorización para usar esta API." 
+       }, { status: 401 })
+    }
+
+    // ==========================================
+    // 🛡️ PROTECCIÓN 1: VALIDACIONES BÁSICAS
+    // ==========================================
     const apiKey = process.env.GEMINI_API_KEY || ""
     if (!apiKey) throw new Error('Falta la GEMINI_API_KEY')
 
-    // 🛡️ PROTECCIÓN 1: Evitar que bots o peticiones vacías llamen a Google
     const body = await req.json()
     const { message, userId } = body
 
@@ -18,6 +37,9 @@ export async function POST(req) {
       })
     }
 
+    // ==========================================
+    // ⚙️ CONFIGURACIÓN INICIAL
+    // ==========================================
     const genAI = new GoogleGenerativeAI(apiKey)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -121,7 +143,6 @@ export async function POST(req) {
     console.error('🔴 ERROR:', error)
     
     // 🛡️ PROTECCIÓN 2: Manejo de Cuota Excedida (Error 429)
-    // Esto evita que la app crashee si Gemini 2.0 se satura
     if (error.message && (error.message.includes('429') || error.message.includes('Quota'))) {
         return NextResponse.json({ 
             response: "El sistema está recibiendo demasiadas consultas en este momento (Límite de API alcanzado). Por favor, intenta de nuevo en unos minutos.",
