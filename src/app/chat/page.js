@@ -220,7 +220,7 @@ export default function AsistenteFinalAzul() {
     const loader = new GLTFLoader();
     
     loader.load(
-      '/Maryprototipo.glb', 
+      '/Maryprototipo2.glb', 
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1); 
@@ -297,47 +297,58 @@ export default function AsistenteFinalAzul() {
     };
   }, []); 
 
-  // --- LÓGICA DE CHAT ---
-  const handleSubmit = async (textOverride = null) => {
-    const textToSend = textOverride || input;
-    if (!textToSend.trim()) return;
+    const handleSubmit = async (textOverride = null) => {
+      const textToSend = textOverride || input;
+      if (!textToSend.trim()) return;
 
-    // 📍 Disparar animación de sonrisa
-    if (actionsRef.current['sonrisa']) {
-        const action = actionsRef.current['sonrisa'];
-        action.reset();
-        action.setLoop(THREE.LoopOnce);
-        action.play();
-    }
+      // 📍 Disparar animación de sonrisa
+      if (actionsRef.current['sonrisa']) {
+          const action = actionsRef.current['sonrisa'];
+          action.reset();
+          action.setLoop(THREE.LoopOnce);
+          action.play();
+      }
 
-    const userMsg = { role: 'user', content: textToSend, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
-    setMessages(prev => [...prev, userMsg]);
-    if (!textOverride) setInput('');
-    setIsLoading(true);
-    setEmotion('neutral');
-    
-    if(window.speechSynthesis) window.speechSynthesis.cancel();
+      const userMsg = { role: 'user', content: textToSend, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
+      setMessages(prev => [...prev, userMsg]);
+      if (!textOverride) setInput('');
+      setIsLoading(true);
+      setEmotion('neutral');
+      
+      if(window.speechSynthesis) window.speechSynthesis.cancel();
 
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: textToSend, userId: userId })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Error');
-      const botMsg = { role: 'bot', content: data.response, source: data.source, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
-      setMessages(prev => [...prev, botMsg]);
-      setEmotion('happy'); 
-      speakText(data.response); // 📍 AQUÍ LLAMA A LA NUEVA VOZ
-      setTimeout(() => setEmotion('neutral'), 3000);
-    } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, { role: 'bot', content: 'Error de conexión.' }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: textToSend, userId: userId })
+        });
+        
+        const data = await response.json();
+        
+        // 🛡️ CORRECCIÓN 1: Si falla, pasamos el mensaje real del backend al Catch
+        if (!response.ok) {
+          // Buscamos el mensaje de error en 'error' o en 'response' (por si acaso)
+          throw new Error(data.error || data.response || 'Error desconocido en el servidor');
+        }
+
+        const botMsg = { role: 'bot', content: data.response, source: data.source, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
+        setMessages(prev => [...prev, botMsg]);
+        setEmotion('happy'); 
+        speakText(data.response);
+        setTimeout(() => setEmotion('neutral'), 3000);
+
+      } catch (error) {
+        console.error("Error capturado en frontend:", error);
+        // 🛡️ CORRECCIÓN 2: Mostramos el mensaje real (error.message) en lugar del texto fijo
+        setMessages(prev => [...prev, { 
+            role: 'bot', 
+            content: error.message || 'Error de conexión. Intenta nuevamente.' 
+        }]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
   // --- JSX ---
   return (

@@ -7,18 +7,26 @@ export async function POST(req) {
     const apiKey = process.env.GEMINI_API_KEY || ""
     if (!apiKey) throw new Error('Falta la GEMINI_API_KEY')
 
+    // 🛡️ PROTECCIÓN 1: Evitar que bots o peticiones vacías llamen a Google
+    const body = await req.json()
+    const { message, userId } = body
+
+    if (!message || message.trim().length === 0) {
+      return NextResponse.json({ 
+        response: "Por favor, escribe una pregunta válida.",
+        source: "Sistema"
+      })
+    }
+
     const genAI = new GoogleGenerativeAI(apiKey)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     )
 
-    const { message, userId } = await req.json()
-
     // ==========================================
     // 🧠 FASE 1: GENERAR EMBEDDING (VECTOR)
     // ==========================================
-    // Convertimos la pregunta del usuario en números
     const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
     const embeddingResult = await embeddingModel.embedContent(message)
     const vectorUsuario = embeddingResult.embedding.values
@@ -26,11 +34,10 @@ export async function POST(req) {
     // ==========================================
     // 🧠 FASE 1.5: VERIFICAR CACHÉ (MEMORIA)
     // ==========================================
-    // Buscamos si alguien ya preguntó algo MUY parecido (umbral alto: 0.85 o 0.9)
     const { data: memoriaEncontrada } = await supabase
       .rpc('buscar_similares', {
         query_embedding: vectorUsuario,
-        match_threshold: 0.90, // ¡Alto! Queremos casi la misma pregunta
+        match_threshold: 0.90, 
         match_count: 1
       })
 
@@ -45,9 +52,6 @@ export async function POST(req) {
     // ==========================================
     // 🔍 FASE 2: BÚSQUEDA SEMÁNTICA (VECTORES)
     // ==========================================
-    
-    // Buscamos en la base de conocimientos usando la función que creamos en SQL (match_documents)
-    // Nota: Umbral 0.5 es un buen equilibrio. Si es muy estricto, bájalo a 0.4
     const { data: documentos, error } = await supabase
       .rpc('match_documents', {
         query_embedding: vectorUsuario, 
@@ -72,8 +76,10 @@ export async function POST(req) {
     // ==========================================
     // 🤖 FASE 3: GENERACIÓN CON GEMINI
     // ==========================================
+    // MANTENIDO: Gemini 2.0 Flash como pediste
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
     
+    // MANTENIDO: Tu prompt original exacto
     const prompt = `
       Eres el Asistente Académico Oficial de la Universidad de Guayaquil.
       
@@ -98,12 +104,11 @@ export async function POST(req) {
     // 💾 FASE 4: GUARDADO DE LOGS
     // ==========================================
     if (userId) {
-       // Guardamos el log para futuras mejoras o caché
        await supabase.from('logs_consultas').insert([{
         usuario_id: userId,
         pregunta: message,
         respuesta_bot: responseText,
-        embedding: vectorUsuario // Guardamos el vector por si quieres usar caché después
+        embedding: vectorUsuario
       }])
     }
 
@@ -114,6 +119,16 @@ export async function POST(req) {
 
   } catch (error) {
     console.error('🔴 ERROR:', error)
+    
+    // 🛡️ PROTECCIÓN 2: Manejo de Cuota Excedida (Error 429)
+    // Esto evita que la app crashee si Gemini 2.0 se satura
+    if (error.message && (error.message.includes('429') || error.message.includes('Quota'))) {
+        return NextResponse.json({ 
+            response: "El sistema está recibiendo demasiadas consultas en este momento (Límite de API alcanzado). Por favor, intenta de nuevo en unos minutos.",
+            source: "Sistema (Sobrecarga Temporal)"
+        })
+    }
+
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
