@@ -1,3 +1,4 @@
+// src/app/api/admin/guardar-reglamento/route.js
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
