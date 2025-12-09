@@ -7,7 +7,8 @@ import * as THREE from 'three';
 // Importamos Cargador y Controles
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Mic, MicOff, LogOut, Send, BookOpen, MessageSquare, Loader2 } from 'lucide-react';
+// 🔥 NUEVO ICONO: VolumeX para el botón de silenciar
+import { Mic, MicOff, LogOut, Send, BookOpen, MessageSquare, Loader2, VolumeX } from 'lucide-react';
 
 export default function AsistenteFinalAzul() {
   // --- ESTADO ---
@@ -19,6 +20,8 @@ export default function AsistenteFinalAzul() {
   const [userEmail, setUserEmail] = useState('')
   const [userId, setUserId] = useState(null)
   const [isListening, setIsListening] = useState(false)
+  // 🔥 NUEVO ESTADO: Para saber si está hablando
+  const [isSpeaking, setIsSpeaking] = useState(false)
 
   // --- REFS ---
   const mountRef = useRef(null)
@@ -49,6 +52,10 @@ export default function AsistenteFinalAzul() {
   }, [router])
 
   const handleLogout = async () => {
+    // Aseguramos que se calle al salir
+    if(typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
     await supabase.auth.signOut()
     router.push('/')
   }
@@ -59,13 +66,10 @@ export default function AsistenteFinalAzul() {
   }, [messages, isLoading])
 
   // --- HELPER: FORMATEAR TEXTO (Negritas) ---
-  // Esta función convierte "Hola **mundo**" en JSX con negritas
   const formatMessage = (text) => {
     if (!text) return '';
-    // Dividimos el texto por los dobles asteriscos
     const parts = text.split('**');
     return parts.map((part, index) => 
-        // Los índices impares (1, 3, 5...) son los que estaban entre asteriscos
         index % 2 === 1 ? <strong key={index} className="font-bold text-blue-800">{part}</strong> : part
     );
   };
@@ -90,6 +94,12 @@ export default function AsistenteFinalAzul() {
 
   const toggleVoice = () => {
     if (!recognitionRef.current) return alert('Navegador no compatible')
+    
+    // Si queremos hablar, primero callamos al asistente si está hablando
+    if (!isListening && isSpeaking) {
+        stopSpeaking();
+    }
+
     if (isListening) {
       recognitionRef.current.stop()
       setIsListening(false)
@@ -99,14 +109,14 @@ export default function AsistenteFinalAzul() {
     }
   }
 
-  // --- TEXT TO SPEECH (MODIFICADO PARA VOZ DE MUJER Y LIMPIEZA) ---
+  // --- TEXT TO SPEECH (MODIFICADO CON CONTROL DE ESTADO) ---
   const speakText = (text) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    
+    // Cancelamos cualquier audio previo
     window.speechSynthesis.cancel()
 
-    // 🧹 LIMPIEZA DE AUDIO: Quitamos los asteriscos para que no los lea
     const cleanText = text.replace(/\*/g, '');
-
     const utterance = new SpeechSynthesisUtterance(cleanText)
     
     const voices = window.speechSynthesis.getVoices()
@@ -128,8 +138,21 @@ export default function AsistenteFinalAzul() {
 
     utterance.rate = 1.0 
     utterance.pitch = 1.1 
+
+    // 🔥 EVENTOS: Controlamos el estado del botón
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
     
     window.speechSynthesis.speak(utterance)
+  }
+
+  // 🔥 NUEVA FUNCIÓN: Detener el habla manualmente
+  const stopSpeaking = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+    }
   }
 
   // ==========================================
@@ -289,6 +312,9 @@ export default function AsistenteFinalAzul() {
       const textToSend = textOverride || input;
       if (!textToSend.trim()) return;
 
+      // Si empieza a "pensar", cortamos cualquier audio anterior
+      stopSpeaking();
+
       if (actionsRef.current['sonrisa']) {
           const action = actionsRef.current['sonrisa'];
           action.reset();
@@ -302,8 +328,6 @@ export default function AsistenteFinalAzul() {
       setIsLoading(true);
       setEmotion('neutral');
       
-      if(window.speechSynthesis) window.speechSynthesis.cancel();
-
       try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -356,11 +380,11 @@ export default function AsistenteFinalAzul() {
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
-                {/* 🔥 CAMBIO UI: Bloque movido a esquina superior derecha y texto más pequeño */}
+                {/* 📍 AQUI ESTÁ CORREGIDO: left-4 asegura que esté a la izquierda */}
                 <div className="absolute top-4 left-4 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
-                       {isLoading ? '⚡ PROCESANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
+                       {isLoading ? '⚡ PROCESANDO...' : isSpeaking ? '🔊 HABLANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
                     </p>
                 </div>
 
@@ -370,10 +394,10 @@ export default function AsistenteFinalAzul() {
                 <button
                   onClick={handleLogout}
                   className="flex-none flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 
-                            bg-red-500/20 hover:bg-red-500/30 
-                            text-red-600 hover:text-red-700 
-                            rounded-full transition text-xs md:text-sm font-medium 
-                            border border-red-300/40">
+                             bg-red-500/20 hover:bg-red-500/30 
+                             text-red-600 hover:text-red-700 
+                             rounded-full transition text-xs md:text-sm font-medium 
+                             border border-red-300/40">
                   <LogOut className="w-3 h-3 md:w-4 md:h-4" /> Salir
                 </button>
 
@@ -401,9 +425,7 @@ export default function AsistenteFinalAzul() {
              {messages.map((msg, i) => (
                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                  <div className={`max-w-[85%] md:max-w-md p-3 md:p-4 rounded-2xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}`}>
-                   {/* 🔥 CAMBIO VISUAL: Usamos la función formatMessage en lugar de mostrar msg.content directamente */}
                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(msg.content)}</p>
-                   
                    {msg.source && (<p className="text-xs mt-3 pt-2 border-t border-gray-100 opacity-70 italic flex items-center gap-1"><BookOpen size={10}/> Fuente: {msg.source}</p>)}
                    <p className={`text-[10px] mt-2 text-right ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>{msg.time}</p>
                  </div>
@@ -421,9 +443,18 @@ export default function AsistenteFinalAzul() {
            
            <div className="bg-white/95 backdrop-blur-md p-3 md:p-4 border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-none z-20">
              <div className="flex gap-2 md:gap-3">
+               
+               {/* BOTÓN DE SILENCIAR: Solo aparece si isSpeaking es true */}
+               {isSpeaking && (
+                   <button onClick={stopSpeaking} className="p-3 md:p-4 rounded-full shadow-md flex-none bg-orange-100 text-orange-600 hover:bg-orange-200 transition animate-in fade-in zoom-in">
+                      <VolumeX className="w-5 h-5" />
+                   </button>
+               )}
+
                <button onClick={toggleVoice} className={`p-3 md:p-4 rounded-full transition shadow-md flex-none ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                  {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                </button>
+               
                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSubmit()} placeholder="Escribe o habla..." className="flex-1 p-3 md:p-4 bg-gray-50 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-500 outline-none text-sm md:text-base text-gray-800 placeholder-gray-400 shadow-inner" disabled={isLoading}/>
                <button onClick={() => handleSubmit()} disabled={!input.trim() || isLoading} className="p-3 md:p-4 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition disabled:bg-gray-300 transform active:scale-95 shadow-md flex-none"><Send className="w-5 h-5" /></button>
              </div>
