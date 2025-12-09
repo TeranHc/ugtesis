@@ -52,12 +52,24 @@ export default function AsistenteFinalAzul() {
   }, [router])
 
   const handleLogout = async () => {
-    // Aseguramos que se calle al salir
+    // 1. Callar a la asistente primero
     if(typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
-    await supabase.auth.signOut()
-    router.push('/')
+    
+    // 2. Intentar cerrar sesión en Supabase
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) console.log("Aviso al cerrar sesión:", error.message);
+    } catch (error) {
+        console.log("Error de red o sesión ya cerrada:", error);
+    } finally {
+        // 3. 🔥 ESTA ES LA CLAVE: Redirigir SIEMPRE, haya error o no.
+        // Limpiamos caché local por si acaso y nos vamos.
+        localStorage.clear(); // Opcional: asegura limpieza total
+        router.refresh(); 
+        router.push('/');
+    }
   }
 
   // --- SCROLL AUTOMÁTICO CHAT ---
