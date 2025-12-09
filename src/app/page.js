@@ -2,8 +2,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient' // Importamos tu conexión
-import { Loader2, LogIn } from 'lucide-react'
+import { supabase } from '@/lib/supabaseClient'
+import { Loader2, LogIn, Download } from 'lucide-react' // <--- 1. Agregamos icono Download
 
 export default function LoginPage() {
   const router = useRouter()
@@ -12,22 +12,59 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // 1. Verificar si ya hay sesión iniciada al entrar
+  // --- NUEVO: ESTADO PARA LA INSTALACIÓN ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [isInstallable, setIsInstallable] = useState(false)
+
+  // 1. Verificar sesión y capturar evento de instalación
   useEffect(() => {
+    // A. Verificar sesión
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
-        // Si ya está logueado, verificamos su rol y lo redirigimos
         redirigirUsuario(session.user.id)
       }
     }
     checkSession()
+
+    // B. Capturar evento de instalación (PWA)
+    const handleInstallPrompt = (e) => {
+      // Prevenir que Chrome muestre la barra automática enseguida
+      e.preventDefault()
+      // Guardar el evento para dispararlo después con el botón
+      setDeferredPrompt(e)
+      // Mostrar el botón en la interfaz
+      setIsInstallable(true)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt)
+
+    // Limpieza
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt)
+    }
   }, [])
+
+  // --- NUEVO: FUNCIÓN PARA INSTALAR ---
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return
+
+    // Mostrar el prompt nativo
+    deferredPrompt.prompt()
+
+    // Esperar a ver qué decidió el usuario
+    const { outcome } = await deferredPrompt.userChoice
+    
+    if (outcome === 'accepted') {
+      console.log('Usuario aceptó instalar')
+      setDeferredPrompt(null)
+      setIsInstallable(false) // Ocultar botón
+    }
+  }
 
   // 2. Función inteligente para redirigir según el rol
   const redirigirUsuario = async (userId) => {
     try {
-      // Buscamos qué rol tiene este usuario en tu tabla 'perfiles_usuarios'
       const { data, error } = await supabase
         .from('perfiles_usuarios')
         .select('rol')
@@ -37,15 +74,12 @@ export default function LoginPage() {
       if (error) throw error
 
       if (data?.rol === 'admin') {
-        console.log('Usuario es Admin -> Redirigiendo al Panel')
         router.push('/admin') 
       } else {
-        console.log('Usuario es Estudiante -> Redirigiendo al Chat')
         router.push('/chat')  
       }
     } catch (err) {
       console.error('Error verificando rol:', err)
-      // Si falla algo, por seguridad lo mandamos al chat
       router.push('/chat')
     }
   }
@@ -63,8 +97,6 @@ export default function LoginPage() {
       })
 
       if (error) throw error
-
-      // Si el login es exitoso, decidimos a dónde mandarlo
       await redirigirUsuario(data.user.id)
 
     } catch (err) {
@@ -79,9 +111,27 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 space-y-6 border border-gray-200">
         
-        <div className="text-center">
+        <div className="text-center relative">
+          {/* BOTÓN DE INSTALACIÓN (Solo visible si es instalable) */}
+          {isInstallable && (
+            <button 
+              onClick={handleInstallClick}
+              className="absolute top-0 right-0 p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-full transition shadow-sm animate-pulse"
+              title="Instalar App"
+            >
+              <Download size={20} />
+            </button>
+          )}
+
           <h1 className="text-3xl font-bold text-blue-900">Asistente UG</h1>
           <p className="text-gray-500 mt-2">Sistema de Apoyo Académico</p>
+          
+          {/* Mensaje extra si se puede instalar */}
+          {isInstallable && (
+             <p className="text-xs text-blue-600 mt-1 cursor-pointer hover:underline" onClick={handleInstallClick}>
+               ¡Instalar aplicación en tu celular!
+             </p>
+          )}
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
