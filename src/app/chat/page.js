@@ -357,7 +357,7 @@ export default function AsistenteFinalAzul() {
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
                 {/* 🔥 CAMBIO UI: Bloque movido a esquina superior derecha y texto más pequeño */}
-                <div className="absolute top-4 right-4 z-20 text-right pointer-events-none">
+                <div className="absolute top-4 right-4 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
                        {isLoading ? '⚡ PROCESANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
