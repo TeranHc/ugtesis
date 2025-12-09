@@ -34,7 +34,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es"> {/* Cambié a 'es' para mejor SEO local */}
+    <html lang="es"> 
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
