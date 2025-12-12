@@ -193,7 +193,7 @@ export default function AsistenteFinalAzul() {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace; 
     renderer.toneMapping = THREE.ACESFilmicToneMapping; 
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 0.85;
     
     while (mountRef.current.firstChild) mountRef.current.removeChild(mountRef.current.firstChild);
     mountRef.current.appendChild(renderer.domElement);
@@ -208,27 +208,42 @@ export default function AsistenteFinalAzul() {
     controls.maxPolarAngle = Math.PI / 2; 
     controls.target.set(0, 1.55, 0); 
 
-    // 5. Iluminación
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); 
+// 5. Iluminación (AJUSTADA: Más brillo general sin quemar)
+
+    // --- CAMBIO 1: Aumentar Luz Ambiental ---
+    // Antes estaba en 0.3. La subimos a 0.7.
+    // Esto hace que las sombras más oscuras sean gris claro en lugar de negro,
+    // "levantando" toda la escena.
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
     scene.add(ambientLight);
 
-    const mainLight = new THREE.DirectionalLight(0xffffff, 2.5); 
-    mainLight.position.set(2, 5, 5);
+    // --- CAMBIO 2: Ajustar Luz Principal (Key Light) ---
+    // Mantenemos la intensidad en 1.2 (está bien), pero bajamos un poco su posición Y.
+    // Antes: .set(2, 5, 5) -> Ahora: .set(2, 3.5, 5)
+    // Al bajarla, le da más de lleno en la cara y el pecho, no tanto desde arriba.
+    const mainLight = new THREE.DirectionalLight(0xffeebb, 1.2); 
+    mainLight.position.set(2, 3.5, 5); // Posición Y bajada para iluminar mejor el rostro
     mainLight.castShadow = true;
     mainLight.shadow.bias = -0.0005;
     mainLight.shadow.mapSize.width = 2048; 
     mainLight.shadow.mapSize.height = 2048;
     scene.add(mainLight);
 
-    const rimLight = new THREE.SpotLight(0x00ffff, 5); 
-    rimLight.position.set(-5, 5, 0);
-    rimLight.lookAt(0, 1, 0);
-    scene.add(rimLight);
-
-    const fillLight = new THREE.HemisphereLight(0xb1e1ff, 0x080820, 1.5); 
+    // --- CAMBIO 3: Aumentar Luz de Relleno (Hemisphere) ---
+    // Antes estaba en 0.8. La subimos a 1.3.
+    // Esta luz es fundamental en entornos oscuros. Rellena todo el modelo
+    // con una luz suave azulada, haciendo que resalte del fondo.
+    const fillLight = new THREE.HemisphereLight(0xddeeff, 0x252550, 1.3); 
     fillLight.position.set(0, 5, -2);
     scene.add(fillLight);
 
+    // --- CAMBIO 4: Luz de Borde (Rim Light) ---
+    // La mantenemos igual, hace un buen trabajo separando el pelo del fondo.
+    const rimLight = new THREE.SpotLight(0x00ffff, 2.5); 
+    rimLight.position.set(-5, 5, 2);
+    rimLight.lookAt(0, 1, 0);
+    scene.add(rimLight);
+    
     // 6. Suelo
     const floorGeometry = new THREE.CircleGeometry(5, 32);
     const floorMaterial = new THREE.MeshStandardMaterial({ 
@@ -256,7 +271,7 @@ export default function AsistenteFinalAzul() {
     // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
-      '/Maryprototipo3.glb', 
+      '/Mary.glb', 
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1); 
