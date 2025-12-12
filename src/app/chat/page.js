@@ -184,8 +184,7 @@ export default function AsistenteFinalAzul() {
     const width = mountRef.current.clientWidth;
     const height = mountRef.current.clientHeight;
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000); 
-    camera.position.set(0, 1.7, 1.5);
-    
+camera.position.set(0, 1.65, 0.9);    
     // 3. Renderizador
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
