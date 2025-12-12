@@ -211,7 +211,7 @@ export default function AsistenteFinalAzul() {
     controls.enableDamping = true; 
     controls.dampingFactor = 0.05;
     controls.enableZoom = true;    
-    controls.minDistance = 1.0;    
+    controls.minDistance = 0.5;    
     controls.maxDistance = 4;      
     controls.maxPolarAngle = Math.PI / 2; 
     controls.target.set(0, 1.55, 0); 
