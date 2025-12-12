@@ -271,7 +271,7 @@ export default function AsistenteFinalAzul() {
     // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
-      '/Mary.glb', 
+      '/Mary.glb', // Asegúrate de que este sea el nombre correcto del archivo nuevo
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1); 
@@ -288,8 +288,27 @@ export default function AsistenteFinalAzul() {
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
 
+        // --- 🔥 AQUÍ ESTÁ EL CAMBIO CLAVE ---
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
+            
+            // 1. ACTIVAR REPOSO (IDLE) AUTOMÁTICAMENTE
+            // Buscamos la animación llamada 'reposo'
+            let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
+            
+            // SI NO LA ENCUENTRA: Usamos la primera animación disponible como respaldo (Plan B)
+            if (!reposoClip) {
+                console.log("No encontré 'reposo', usando la primera animación disponible.");
+                reposoClip = animations[0];
+            }
+
+            if (reposoClip) {
+                const action = mixer.clipAction(reposoClip);
+                action.play(); // <--- ¡ESTO ES LO QUE BAJA LOS BRAZOS!
+                actionsRef.current['reposo'] = action;
+            }
+
+            // 2. CONFIGURAR SONRISA (Para usarla después)
             const sonrisaClip = THREE.AnimationClip.findByName(animations, 'sonrisa');
             if (sonrisaClip) {
                 const action = mixer.clipAction(sonrisaClip);
@@ -298,6 +317,8 @@ export default function AsistenteFinalAzul() {
                 actionsRef.current['sonrisa'] = action;
             }
         }
+        // ------------------------------------
+
         scene.add(model);
         characterRef.current = model;
       },
