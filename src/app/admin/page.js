@@ -274,7 +274,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* LISTA DE REGLAMENTOS (Ajustado a Flex-Col en móvil) */}
+          {/* LISTA DE REGLAMENTOS */}
           {currentView === 'lista' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-3">
@@ -290,7 +290,8 @@ export default function AdminPage() {
               </div>
               <div className="divide-y divide-gray-100">
                 {reglamentos.map(reg => (
-                  <div key={reg.id} className="p-4 md:p-5 hover:bg-blue-50 transition">
+                  // 🔥 AQUI FALTABA LA CLASE "group" PARA QUE FUNCIONE EL HOVER
+                  <div key={reg.id} className="p-4 md:p-5 hover:bg-blue-50 transition group">
                     <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                       <div className="flex-1 w-full">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -301,10 +302,10 @@ export default function AdminPage() {
                         <p className="text-gray-600 text-xs md:text-sm mt-1 line-clamp-2">{reg.contenido}</p>
                       </div>
                       
-                      {/* Botones siempre visibles en móvil, hover en PC */}
+                      {/* Botones: En móvil se ven siempre. En PC solo al pasar el mouse (gracias a la clase 'group' arriba) */}
                       <div className="flex gap-2 w-full md:w-auto md:opacity-0 md:group-hover:opacity-100 transition-opacity justify-end">
-                        <button onClick={() => handleEdit(reg)} className="flex-1 md:flex-none p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex justify-center"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => solicitarBorrarReglamento(reg.id)} className="flex-1 md:flex-none p-2 bg-red-50 text-red-600 rounded-lg border border-red-100 flex justify-center"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleEdit(reg)} className="flex-1 md:flex-none p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex justify-center hover:bg-blue-100"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => solicitarBorrarReglamento(reg.id)} className="flex-1 md:flex-none p-2 bg-red-50 text-red-600 rounded-lg border border-red-100 flex justify-center hover:bg-red-100"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                   </div>
