@@ -101,8 +101,7 @@ export async function POST(req) {
     // ==========================================
     // 🤖 FASE 3: GENERACIÓN CON GEMINI
     // ==========================================
-    // MANTENIDO: Gemini 2.0 Flash como pediste
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
     
     // MANTENIDO: Tu prompt original exacto
     const prompt = `
