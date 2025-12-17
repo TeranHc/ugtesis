@@ -25,7 +25,7 @@ export default function AdminPage() {
   const [filterCategory, setFilterCategory] = useState('Todas') 
 
   // Filtros de Logs
-  const [logTimeFilter, setLogTimeFilter] = useState('3días') // Por defecto 3 días
+  const [logTimeFilter, setLogTimeFilter] = useState('3días') 
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
 
@@ -57,7 +57,6 @@ export default function AdminPage() {
     if (logsData) setLogs(logsData)
   }
 
-  // Lógica de Resaltado
   const highlightText = (text, highlight) => {
     if (!highlight.trim()) return text;
     const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
@@ -72,22 +71,18 @@ export default function AdminPage() {
     );
   };
 
-  // FILTRADO DE LOGS POR TIEMPO
   const logsFiltrados = logs.filter(log => {
     const fechaLog = new Date(log.fecha);
     const ahora = new Date();
-
     if (logTimeFilter === 'hora') return ahora - fechaLog <= 3600000;
     if (logTimeFilter === 'hoy') return fechaLog.toDateString() === ahora.toDateString();
     if (logTimeFilter === '3días') return ahora - fechaLog <= 3 * 86400000;
     if (logTimeFilter === 'semana') return ahora - fechaLog <= 7 * 86400000;
     if (logTimeFilter === 'mes') return ahora - fechaLog <= 30 * 86400000;
-    
     if (logTimeFilter === 'custom') {
       const inicio = customStartDate ? new Date(customStartDate) : null;
       const fin = customEndDate ? new Date(customEndDate) : null;
-      if (fin) fin.setHours(23, 59, 59); // Incluir todo el día final
-      
+      if (fin) fin.setHours(23, 59, 59);
       if (inicio && fin) return fechaLog >= inicio && fechaLog <= fin;
       if (inicio) return fechaLog >= inicio;
       if (fin) return fechaLog <= fin;
@@ -155,7 +150,6 @@ export default function AdminPage() {
       
       {sidebarOpen && ( <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 md:hidden" /> )}
 
-      {/* MODAL DE BORRADO */}
       {deleteModal.show && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm text-black">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
@@ -163,20 +157,19 @@ export default function AdminPage() {
             <h3 className="text-xl font-bold">¿Estás seguro?</h3>
             <p className="text-gray-500 text-sm mt-2 mb-6">Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteModal({ show: false, type: null })} className="flex-1 py-3 border rounded-xl font-medium hover:bg-gray-50 transition">Cancelar</button>
-              <button onClick={confirmarBorrado} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold flex justify-center gap-2 hover:bg-red-700 transition"><Trash2 size={18}/> Borrar</button>
+              <button onClick={() => setDeleteModal({ show: false, type: null })} className="flex-1 py-3 border rounded-xl font-medium hover:bg-gray-50 transition font-sans">Cancelar</button>
+              <button onClick={confirmarBorrado} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold flex justify-center gap-2 hover:bg-red-700 transition font-sans font-bold"><Trash2 size={18}/> Borrar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL NUEVA CATEGORIA */}
       {showModalCategoria && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 text-black">
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 text-black font-sans">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 className="font-bold mb-4 font-sans">Nueva Categoría</h3>
+            <h3 className="font-bold mb-4">Nueva Categoría</h3>
             <input autoFocus type="text" value={nuevaCategoriaInput} onChange={(e) => setNuevaCategoriaInput(e.target.value)} className="w-full p-2 border rounded mb-4 text-black outline-none focus:ring-2 focus:ring-blue-500 font-sans" />
-            <div className="flex justify-end gap-2 font-sans">
+            <div className="flex justify-end gap-2">
               <button onClick={() => setShowModalCategoria(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded">Cancelar</button>
               <button onClick={guardarNuevaCategoria} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition">Guardar</button>
             </div>
@@ -184,7 +177,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* SIDEBAR */}
       <div className={`fixed inset-y-0 left-0 z-50 bg-blue-900 text-white transition-all duration-300 flex flex-col shadow-xl md:relative ${sidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full md:w-20 md:translate-x-0'}`}>
         <div className="p-4 flex items-center justify-between border-b border-blue-800 h-16">
           {(sidebarOpen || window.innerWidth < 768) && <h2 className="text-xl font-bold tracking-wide truncate font-sans uppercase">Admin Panel</h2>}
@@ -192,7 +184,7 @@ export default function AdminPage() {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto font-sans">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto font-sans font-bold">
           {[
             { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
             { id: 'lista', icon: BookOpen, label: 'Reglamentos' },
@@ -205,7 +197,7 @@ export default function AdminPage() {
             </button>
           ))}
         </nav>
-        <button onClick={handleLogout} className="p-4 flex items-center gap-3 border-t border-blue-800 hover:bg-blue-800 transition bg-blue-950 font-sans">
+        <button onClick={handleLogout} className="p-4 flex items-center gap-3 border-t border-blue-800 hover:bg-blue-800 transition bg-blue-950 font-sans font-bold">
           <LogOut className="w-5 h-5 min-w-[20px]" /> <span className={`${!sidebarOpen && 'md:hidden'}`}>Salir</span>
         </button>
       </div>
@@ -216,15 +208,15 @@ export default function AdminPage() {
             <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Menu className="w-6 h-6" /></button>
             <h1 className="text-lg md:text-2xl font-bold text-gray-800 truncate font-sans uppercase">{currentView}</h1>
           </div>
-          {mensajeSistema && <span className="hidden md:block bg-green-100 text-green-700 px-3 py-1 rounded text-sm animate-pulse font-medium font-sans">{mensajeSistema}</span>}
+          {mensajeSistema && <span className="hidden md:block bg-green-100 text-green-700 px-3 py-1 rounded text-sm animate-pulse font-medium font-sans font-bold">{mensajeSistema}</span>}
         </div>
         
         <div className="p-4 md:p-6 max-w-6xl mx-auto w-full font-sans">
           
           {currentView === 'dashboard' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition"><div className="flex items-center justify-between"><div><p className="text-gray-500 text-sm font-medium">Reglamentos</p><p className="text-3xl font-bold text-blue-600 mt-2">{reglamentos.length}</p></div><div className="p-3 bg-blue-50 rounded-full"><BookOpen className="w-8 h-8 text-blue-600" /></div></div></div>
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition"><div className="flex items-center justify-between"><div><p className="text-gray-500 text-sm font-medium">Consultas</p><p className="text-3xl font-bold text-green-600 mt-2">{logs.length}</p></div><div className="p-3 bg-green-50 rounded-full"><MessageSquare className="w-8 h-8 text-green-600" /></div></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition"><div className="flex items-center justify-between font-bold"><div><p className="text-gray-500 text-sm font-medium">Reglamentos</p><p className="text-3xl font-bold text-blue-600 mt-2">{reglamentos.length}</p></div><div className="p-3 bg-blue-50 rounded-full"><BookOpen className="w-8 h-8 text-blue-600" /></div></div></div>
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition font-bold"><div className="flex items-center justify-between"><div><p className="text-gray-500 text-sm font-medium">Consultas</p><p className="text-3xl font-bold text-green-600 mt-2">{logs.length}</p></div><div className="p-3 bg-green-50 rounded-full"><MessageSquare className="w-8 h-8 text-green-600" /></div></div></div>
             </div>
           )}
 
@@ -236,8 +228,9 @@ export default function AdminPage() {
                   <input type="text" placeholder="Buscar por título, categoría o contenido..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-black" />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
-                  <div className="relative w-full sm:w-auto text-black font-sans">
-                    <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="w-full sm:w-64 flex items-center justify-between gap-2 bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm font-medium transition hover:border-gray-400">
+                  {/* FILTRO CATEGORIA CORREGIDO */}
+                  <div className="relative w-full sm:w-auto text-black font-sans font-bold">
+                    <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="w-full sm:w-64 flex items-center justify-between gap-2 bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm font-bold transition hover:border-gray-400">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <Filter className="w-4 h-4 text-gray-500 shrink-0" />
                         <span className="truncate">{filterCategory === 'Todas' ? 'Todas las Categorías' : filterCategory}</span>
@@ -247,7 +240,8 @@ export default function AdminPage() {
                     {showFilterDropdown && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowFilterDropdown(false)}></div>
-                        <div className="absolute right-0 z-50 mt-1 w-full sm:w-72 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                        {/* Alineación corregida: left-0 en móvil/mitad de pantalla para que no se corte a la izquierda */}
+                        <div className="absolute left-0 lg:right-0 z-50 mt-1 w-full sm:w-80 lg:w-72 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto font-bold">
                           <button onClick={() => { setFilterCategory('Todas'); setShowFilterDropdown(false); }} className={`w-full text-left p-3 text-sm transition-colors border-b ${filterCategory === 'Todas' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}>Todas las Categorías</button>
                           {listaCategorias.map((cat, i) => (
                             <button key={i} onClick={() => { setFilterCategory(cat); setShowFilterDropdown(false); }} className={`w-full text-left p-3 text-sm transition-colors border-b last:border-0 leading-tight whitespace-normal ${filterCategory === cat ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}>{cat}</button>
@@ -257,7 +251,7 @@ export default function AdminPage() {
                     )}
                   </div>
                   {reglamentos.length > 0 && (
-                    <button onClick={() => setDeleteModal({show: true, type: 'all_reglamentos'})} className="w-full sm:w-auto text-red-600 bg-white border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition font-sans"><Trash2 size={16} /> Borrar Todo</button>
+                    <button onClick={() => setDeleteModal({show: true, type: 'all_reglamentos'})} className="w-full sm:w-auto text-red-600 bg-white border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition font-sans font-bold"><Trash2 size={16} /> Borrar Todo</button>
                   )}
                 </div>
               </div>
@@ -269,9 +263,9 @@ export default function AdminPage() {
                     <div key={reg.id} className="p-4 md:p-5 hover:bg-blue-50 transition group">
                       <div className="flex flex-col md:flex-row justify-between items-start gap-4 text-black">
                         <div className="flex-1 w-full text-black">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <div className="flex flex-wrap items-center gap-2 mb-1 font-bold">
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] md:text-xs font-bold rounded-md uppercase">{highlightText(reg.categoria, searchTerm)}</span>
-                            <span className="text-[10px] text-gray-400 flex items-center gap-1 font-sans"><Clock size={10}/> {new Date(reg.fecha_actualizacion).toLocaleDateString()}</span>
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1 font-sans font-bold"><Clock size={10}/> {new Date(reg.fecha_actualizacion).toLocaleDateString()}</span>
                           </div>
                           <h3 className="font-bold text-gray-800 text-base md:text-lg leading-tight font-sans">{highlightText(reg.titulo, searchTerm)}</h3>
                           <p className="text-gray-600 text-xs md:text-sm mt-2 line-clamp-2 leading-relaxed font-sans">{highlightText(reg.contenido, searchTerm)}</p>
@@ -293,18 +287,18 @@ export default function AdminPage() {
               <div className="space-y-4 md:space-y-6">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Título</label>
-                  <input type="text" value={formData.titulo} onChange={(e) => setFormData({...formData, titulo: e.target.value})} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej: Reglamento de Admisión..." />
+                  <input type="text" value={formData.titulo} onChange={(e) => setFormData({...formData, titulo: e.target.value})} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-bold" placeholder="Ej: Reglamento de Admisión..." />
                 </div>
                 <div className="relative">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Categoría</label>
-                  <button onClick={() => setShowDropdown(!showDropdown)} className="w-full p-3 border rounded-lg bg-white text-black flex justify-between items-center outline-none focus:ring-2 focus:ring-blue-500">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 font-bold">Categoría</label>
+                  <button onClick={() => setShowDropdown(!showDropdown)} className="w-full p-3 border rounded-lg bg-white text-black flex justify-between items-center outline-none focus:ring-2 focus:ring-blue-500 font-bold">
                     <span className="text-left leading-tight whitespace-normal">{formData.categoria || "Seleccionar"}</span>
                     <ChevronDown size={20} className={`text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
                   </button>
                   {showDropdown && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}></div>
-                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto font-sans">
+                      <div className="absolute left-0 z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto font-bold">
                         <button onClick={() => { setShowModalCategoria(true); setShowDropdown(false); }} className="w-full text-left p-3 text-blue-600 font-bold hover:bg-blue-50 border-b">+ Nueva...</button>
                         {listaCategorias.map((cat, i) => (
                           <button key={i} onClick={() => { setFormData({...formData, categoria: cat}); setShowDropdown(false); }} className="w-full text-left p-3 text-black hover:bg-gray-50 border-b last:border-0 leading-tight whitespace-normal text-sm">{cat}</button>
@@ -314,8 +308,8 @@ export default function AdminPage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Contenido</label>
-                  <textarea value={formData.contenido} onChange={(e) => setFormData({...formData, contenido: e.target.value})} rows="15" className="w-full p-3 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Texto completo..." />
+                  <label className="block text-sm font-bold text-gray-700 mb-2 font-bold">Contenido</label>
+                  <textarea value={formData.contenido} onChange={(e) => setFormData({...formData, contenido: e.target.value})} rows="15" className="w-full p-3 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold" placeholder="Texto completo..." />
                   <p className="text-right text-xs text-gray-400 mt-1 font-bold font-sans">Caracteres: {formData.contenido.length}</p>
                 </div>
                 <div className="flex flex-col-reverse md:flex-row gap-4 pt-4 border-t font-sans">
@@ -326,10 +320,8 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* AUDITORÍA (LOGS) CON FILTROS DE TIEMPO */}
           {currentView === 'logs' && (
             <div className="space-y-4 font-sans text-black">
-              {/* BARRA DE FILTROS DE TIEMPO */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   <Clock size={18} className="text-gray-400 mr-2" />
@@ -351,24 +343,21 @@ export default function AdminPage() {
                     </button>
                   ))}
                 </div>
-
                 {logTimeFilter === 'custom' && (
-                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-1 font-bold">
                     <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" />
                     <span className="text-gray-400">a</span>
                     <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 )}
-
                 {logs.length > 0 && (
                   <button onClick={solicitarVaciarHistorial} className="text-red-600 text-xs md:text-sm font-bold flex items-center gap-1 hover:text-red-800 transition">
                     <Trash2 size={14} /> Vaciar Historial
                   </button>
                 )}
               </div>
-
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 text-black">
-                <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-xl">
+                <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-xl font-bold">
                   <h3 className="font-bold text-gray-700 flex items-center gap-2">
                     <MessageSquare size={18} /> Mostrando {logsFiltrados.length} consultas
                   </h3>
@@ -383,10 +372,10 @@ export default function AdminPage() {
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2">
                             <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase">Estudiante</span>
-                            <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><Calendar size={10}/> {new Date(log.fecha).toLocaleString()}</span>
+                            <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1 font-bold"><Calendar size={10}/> {new Date(log.fecha).toLocaleString()}</span>
                           </div>
-                          <p className="font-bold text-gray-800 text-base">"{log.pregunta}"</p>
-                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-gray-700 mt-1 leading-relaxed">{log.respuesta_bot}</div>
+                          <p className="font-bold text-gray-800 text-base font-bold">"{log.pregunta}"</p>
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-gray-700 mt-1 leading-relaxed font-bold">{log.respuesta_bot}</div>
                         </div>
                       </div>
                     ))
