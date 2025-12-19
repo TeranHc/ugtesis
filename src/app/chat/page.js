@@ -34,7 +34,7 @@ export default function AsistenteFinalAzul() {
   // 🎥 REFS THREE.JS
   const cameraRef = useRef(null)
   const controlsRef = useRef(null)
-  const rendererRef = useRef(null) // Nueva referencia para el renderer
+  const rendererRef = useRef(null) 
 
   // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
@@ -156,24 +156,19 @@ export default function AsistenteFinalAzul() {
     const isMobile = window.innerWidth < 768;
 
     if (isCameraFixed) {
-        // --- MODO FIJO (FRONTAL Y ALTO) ---
         controls.enableZoom = false;
         controls.enableRotate = false;
         controls.enablePan = false; 
         
-        // CORRECCIÓN: Altura de Cámara = Altura del Objetivo (Cara a cara)
         if (isMobile) {
             camera.position.set(0, 1.65, 0.85); 
         } else {
             camera.position.set(0, 1.65, 1.0);  
         }
-        
-        // Apuntar a la cara
         controls.target.set(0, 1.65, 0); 
         controls.update();
 
     } else {
-        // --- MODO LIBRE (MOVIBLE) ---
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.enablePan = true; 
@@ -212,11 +207,10 @@ export default function AsistenteFinalAzul() {
     const renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
         alpha: true,
-        powerPreference: "high-performance" // Priorizar calidad
+        powerPreference: "high-performance" 
     });
     
-    // 🔥 CORRECCIÓN DE PIXELES (HD EN MÓVILES)
-    // Esto hace que en pantallas Retina/OLED se vea nítido
+    // HD en móviles
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
     renderer.setSize(width, height);
     
@@ -237,9 +231,8 @@ export default function AsistenteFinalAzul() {
     controls.maxPolarAngle = Math.PI / 2; 
     controlsRef.current = controls;
 
-    // --- ESTADO INICIAL (Usamos los valores del modo FIJO/FRONTAL) ---
+    // --- ESTADO INICIAL ---
     const isMobile = width < 768;
-    
     controls.enableZoom = false;
     controls.enableRotate = false;
     controls.enablePan = false;
@@ -356,7 +349,6 @@ export default function AsistenteFinalAzul() {
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
-            // 🔥 ACTUALIZAR PIXELES AL CAMBIAR TAMAÑO
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         }
     }
@@ -433,11 +425,13 @@ export default function AsistenteFinalAzul() {
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         
-        <div className="w-full h-[45dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
+        {/* 1. CONTENEDOR 3D (REDUCIDO EN MÓVIL) */}
+        {/* Cambié h-[45dvh] a h-[38dvh] para dar más espacio al chat en móvil */}
+        <div className="w-full h-[38dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
-                <div className="absolute top-4 left-4 z-20 text-left pointer-events-none">
+                <div className="absolute top-5 left-5 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
                        {isLoading ? '⚡ PROCESANDO...' : isSpeaking ? '🔊 HABLANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
@@ -446,7 +440,7 @@ export default function AsistenteFinalAzul() {
 
                 <button 
                   onClick={() => setIsCameraFixed(!isCameraFixed)}
-                  className={`absolute top-4 right-4 z-20 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 border
+                  className={`absolute top-5 right-5 z-20 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 border
                     ${isCameraFixed 
                         ? 'bg-blue-600/80 text-white border-blue-400 hover:bg-blue-500' 
                         : 'bg-white/20 text-blue-200 border-white/10 hover:bg-white/30'}`}
@@ -457,7 +451,8 @@ export default function AsistenteFinalAzul() {
 
             </div>
             <div className="bg-white p-3 md:p-4 border-t border-gray-200 flex justify-between items-center z-20">
-                <p className="text-[10px] text-gray-600 italic truncate mr-2">Sistema Inteligente de Respuesta Académica</p>
+                {/* Agregamos saltos de línea permitidos si no hay espacio */}
+                <p className="text-[10px] text-gray-600 italic leading-tight mr-2">Sistema Inteligente de Respuesta Académica</p>
                 <button
                   onClick={handleLogout}
                   className="flex-none flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 
@@ -471,18 +466,20 @@ export default function AsistenteFinalAzul() {
             </div>
         </div>
 
+        {/* 2. CONTENEDOR CHAT */}
         <div className="w-full flex-1 md:w-1/2 flex flex-col bg-white relative z-10 shadow-2xl overflow-hidden">
            <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
              {messages.length === 0 && (
-               <div className="text-center py-8 md:py-12 animate-fade-in-up">
-                 <div className="w-20 h-20 md:w-24 md:h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-100">
-                   <MessageSquare className="w-10 h-10 md:w-12 md:h-12 text-blue-600" />
+               /* BIENVENIDA COMPACTA: Padding y margenes reducidos en móvil */
+               <div className="text-center py-4 md:py-12 animate-fade-in-up">
+                 <div className="w-16 h-16 md:w-24 md:h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-xl shadow-blue-100">
+                   <MessageSquare className="w-8 h-8 md:w-12 md:h-12 text-blue-600" />
                  </div>
-                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-3">¡Hola! Soy tu asistente</h2>
-                 <p className="text-sm md:text-base text-gray-600 mb-8 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales. Escríbeme o usa el micrófono.</p>
-                 <div className="grid grid-cols-1 gap-3 max-w-md mx-auto px-4">
-                   {['Como puedo solicitar una recalificación de notas?', '¿Como es el proceso de titulación?', '¿Como estudio en la Universidad de Guayaquil?'].map((q, i) => (
-                     <button key={i} onClick={() => handleSubmit(q)} className="p-3 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700">
+                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 md:mb-3">¡Hola! Soy tu asistente</h2>
+                 <p className="text-sm md:text-base text-gray-600 mb-6 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales.</p>
+                 <div className="grid grid-cols-1 gap-2 md:gap-3 max-w-md mx-auto px-4">
+                   {['¿Cómo solicito una recalificación?', '¿Proceso de titulación?', '¿Cómo estudio en la UG?'].map((q, i) => (
+                     <button key={i} onClick={() => handleSubmit(q)} className="p-3 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700 truncate">
                        {q}
                      </button>
                    ))}
@@ -508,7 +505,8 @@ export default function AsistenteFinalAzul() {
              <div ref={messagesEndRef} />
            </div>
            
-           <div className="bg-white/95 backdrop-blur-md p-3 md:p-4 border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-none z-20">
+           {/* BARRA DE INPUT: Padding bottom extra (pb-6) para celulares sin marco */}
+           <div className="bg-white/95 backdrop-blur-md p-3 md:p-4 pb-6 md:pb-4 border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-none z-20">
              <div className="flex gap-2 md:gap-3">
                
                {isSpeaking && (
