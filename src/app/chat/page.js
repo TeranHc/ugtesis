@@ -34,6 +34,7 @@ export default function AsistenteFinalAzul() {
   // 🎥 REFS THREE.JS
   const cameraRef = useRef(null)
   const controlsRef = useRef(null)
+  const rendererRef = useRef(null) // Nueva referencia para el renderer
 
   // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
@@ -160,15 +161,14 @@ export default function AsistenteFinalAzul() {
         controls.enableRotate = false;
         controls.enablePan = false; 
         
-        // 🔥 CORRECCIÓN CLAVE: Altura de Cámara = Altura del Objetivo
-        // Esto crea el efecto "totalmente de frente" (sin picada)
+        // CORRECCIÓN: Altura de Cámara = Altura del Objetivo (Cara a cara)
         if (isMobile) {
-            camera.position.set(0, 1.65, 0.85); // Móvil: Cara a cara
+            camera.position.set(0, 1.65, 0.85); 
         } else {
-            camera.position.set(0, 1.65, 1.0);  // PC: Cara a cara
+            camera.position.set(0, 1.65, 1.0);  
         }
         
-        // Apuntamos directo a los ojos/frente (antes era 1.55 cuello)
+        // Apuntar a la cara
         controls.target.set(0, 1.65, 0); 
         controls.update();
 
@@ -176,10 +176,8 @@ export default function AsistenteFinalAzul() {
         // --- MODO LIBRE (MOVIBLE) ---
         controls.enableZoom = true;
         controls.enableRotate = true;
-        // ✅ HABILITADO PAN (Clic derecho funciona)
         controls.enablePan = true; 
         
-        // Volvemos a una vista un poco más alejada para manipular
         if (isMobile) {
             camera.position.set(0, 1.55, 1.1); 
         } else {
@@ -211,8 +209,17 @@ export default function AsistenteFinalAzul() {
     cameraRef.current = camera; 
 
     // 3. Renderizador
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        powerPreference: "high-performance" // Priorizar calidad
+    });
+    
+    // 🔥 CORRECCIÓN DE PIXELES (HD EN MÓVILES)
+    // Esto hace que en pantallas Retina/OLED se vea nítido
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
     renderer.setSize(width, height);
+    
     renderer.shadowMap.enabled = true; 
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace; 
@@ -221,6 +228,7 @@ export default function AsistenteFinalAzul() {
     
     while (mountRef.current.firstChild) mountRef.current.removeChild(mountRef.current.firstChild);
     mountRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
     // 4. Controles
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -236,13 +244,12 @@ export default function AsistenteFinalAzul() {
     controls.enableRotate = false;
     controls.enablePan = false;
     
-    // 🔥 VALORES INICIALES CORREGIDOS
     if (isMobile) {
         camera.position.set(0, 1.65, 0.85);
     } else {
         camera.position.set(0, 1.65, 1.0);
     }
-    controls.target.set(0, 1.65, 0); // Apuntar a la cara
+    controls.target.set(0, 1.65, 0); 
     controls.update();
 
     // 5. Iluminación
@@ -349,6 +356,8 @@ export default function AsistenteFinalAzul() {
             camera.aspect = w / h;
             camera.updateProjectionMatrix();
             renderer.setSize(w, h);
+            // 🔥 ACTUALIZAR PIXELES AL CAMBIAR TAMAÑO
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         }
     }
     window.addEventListener('resize', handleResize);
