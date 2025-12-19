@@ -1,14 +1,12 @@
-//src/app/chat/page.js
+// src/app/chat/page.js
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import * as THREE from 'three';
-// Importamos Cargador y Controles
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-// 🔥 NUEVO ICONO: VolumeX para el botón de silenciar
-import { Mic, MicOff, LogOut, Send, BookOpen, MessageSquare, Loader2, VolumeX } from 'lucide-react';
+import { Mic, MicOff, LogOut, Send, BookOpen, MessageSquare, Loader2, VolumeX, Lock, Unlock } from 'lucide-react';
 
 export default function AsistenteFinalAzul() {
   // --- ESTADO ---
@@ -20,8 +18,10 @@ export default function AsistenteFinalAzul() {
   const [userEmail, setUserEmail] = useState('')
   const [userId, setUserId] = useState(null)
   const [isListening, setIsListening] = useState(false)
-  // 🔥 NUEVO ESTADO: Para saber si está hablando
   const [isSpeaking, setIsSpeaking] = useState(false)
+  
+  // 🎥 ESTADO: True = Cámara Fija (Frontal a la cara), False = Libre
+  const [isCameraFixed, setIsCameraFixed] = useState(true)
 
   // --- REFS ---
   const mountRef = useRef(null)
@@ -31,7 +31,11 @@ export default function AsistenteFinalAzul() {
   const recognitionRef = useRef(null)
   const messagesEndRef = useRef(null)
 
-  // 📍 NUEVAS REFS PARA ANIMACIÓN
+  // 🎥 REFS THREE.JS
+  const cameraRef = useRef(null)
+  const controlsRef = useRef(null)
+
+  // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
   const actionsRef = useRef({}) 
   const clockRef = useRef(new THREE.Clock()) 
@@ -52,32 +56,24 @@ export default function AsistenteFinalAzul() {
   }, [router])
 
   const handleLogout = async () => {
-    // 1. Callar a la asistente primero
     if(typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
-    
-    // 2. Intentar cerrar sesión en Supabase
     try {
-        const { error } = await supabase.auth.signOut();
-        if (error) console.log("Aviso al cerrar sesión:", error.message);
+        await supabase.auth.signOut();
     } catch (error) {
-        console.log("Error de red o sesión ya cerrada:", error);
+        console.log(error);
     } finally {
-        // 3. 🔥 ESTA ES LA CLAVE: Redirigir SIEMPRE, haya error o no.
-        // Limpiamos caché local por si acaso y nos vamos.
-        localStorage.clear(); // Opcional: asegura limpieza total
+        localStorage.clear();
         router.refresh(); 
         router.push('/');
     }
   }
 
-  // --- SCROLL AUTOMÁTICO CHAT ---
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isLoading])
 
-  // --- HELPER: FORMATEAR TEXTO (Negritas) ---
   const formatMessage = (text) => {
     if (!text) return '';
     const parts = text.split('**');
@@ -86,7 +82,7 @@ export default function AsistenteFinalAzul() {
     );
   };
 
-  // --- VOZ (SPEECH TO TEXT) ---
+  // --- VOZ ---
   useEffect(() => {
     if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -106,12 +102,7 @@ export default function AsistenteFinalAzul() {
 
   const toggleVoice = () => {
     if (!recognitionRef.current) return alert('Navegador no compatible')
-    
-    // Si queremos hablar, primero callamos al asistente si está hablando
-    if (!isListening && isSpeaking) {
-        stopSpeaking();
-    }
-
+    if (!isListening && isSpeaking) stopSpeaking();
     if (isListening) {
       recognitionRef.current.stop()
       setIsListening(false)
@@ -121,11 +112,8 @@ export default function AsistenteFinalAzul() {
     }
   }
 
-  // --- TEXT TO SPEECH (MODIFICADO CON CONTROL DE ESTADO) ---
   const speakText = (text) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    
-    // Cancelamos cualquier audio previo
     window.speechSynthesis.cancel()
 
     const cleanText = text.replace(/\*/g, '');
@@ -134,24 +122,14 @@ export default function AsistenteFinalAzul() {
     const voices = window.speechSynthesis.getVoices()
     const spanishVoices = voices.filter(v => v.lang.includes('es'))
     let femaleVoice = spanishVoices.find(v => 
-        v.name.includes('Sabina') || 
-        v.name.includes('Paulina') || 
-        v.name.includes('Elena') || 
-        v.name.includes('Laura') || 
-        v.name.includes('Monica') ||
-        v.name.includes('Google español')
+        v.name.includes('Sabina') || v.name.includes('Paulina') || v.name.includes('Google español')
     )
 
-    if (femaleVoice) {
-        utterance.voice = femaleVoice
-    } else if (spanishVoices.length > 0) {
-        utterance.voice = spanishVoices[0]
-    }
+    if (femaleVoice) utterance.voice = femaleVoice
+    else if (spanishVoices.length > 0) utterance.voice = spanishVoices[0]
 
     utterance.rate = 1.0 
     utterance.pitch = 1.1 
-
-    // 🔥 EVENTOS: Controlamos el estado del botón
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
@@ -159,7 +137,6 @@ export default function AsistenteFinalAzul() {
     window.speechSynthesis.speak(utterance)
   }
 
-  // 🔥 NUEVA FUNCIÓN: Detener el habla manualmente
   const stopSpeaking = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -168,12 +145,59 @@ export default function AsistenteFinalAzul() {
   }
 
   // ==========================================
+  // 🎥 1. LÓGICA DE CAMBIO DE MODO DE CÁMARA
+  // ==========================================
+  useEffect(() => {
+    if (!controlsRef.current || !cameraRef.current) return;
+
+    const controls = controlsRef.current;
+    const camera = cameraRef.current;
+    const isMobile = window.innerWidth < 768;
+
+    if (isCameraFixed) {
+        // --- MODO FIJO (FRONTAL Y ALTO) ---
+        controls.enableZoom = false;
+        controls.enableRotate = false;
+        controls.enablePan = false; 
+        
+        // 🔥 CORRECCIÓN CLAVE: Altura de Cámara = Altura del Objetivo
+        // Esto crea el efecto "totalmente de frente" (sin picada)
+        if (isMobile) {
+            camera.position.set(0, 1.65, 0.85); // Móvil: Cara a cara
+        } else {
+            camera.position.set(0, 1.65, 1.0);  // PC: Cara a cara
+        }
+        
+        // Apuntamos directo a los ojos/frente (antes era 1.55 cuello)
+        controls.target.set(0, 1.65, 0); 
+        controls.update();
+
+    } else {
+        // --- MODO LIBRE (MOVIBLE) ---
+        controls.enableZoom = true;
+        controls.enableRotate = true;
+        // ✅ HABILITADO PAN (Clic derecho funciona)
+        controls.enablePan = true; 
+        
+        // Volvemos a una vista un poco más alejada para manipular
+        if (isMobile) {
+            camera.position.set(0, 1.55, 1.1); 
+        } else {
+            camera.position.set(0, 1.65, 1.2); 
+        }
+        controls.target.set(0, 1.55, 0);
+        controls.update();
+    }
+  }, [isCameraFixed]) 
+
+
+  // ==========================================
   // 🎨 THREE.JS: ESCENA 3D
   // ==========================================
   useEffect(() => {
     if (!mountRef.current) return
 
-    // 1. Configuración de Escena
+    // 1. Escena
     const scene = new THREE.Scene();
     const deepBlue = 0x051535; 
     scene.fog = new THREE.Fog(deepBlue, 5, 20); 
@@ -184,17 +208,9 @@ export default function AsistenteFinalAzul() {
     const width = mountRef.current.clientWidth;
     const height = mountRef.current.clientHeight;
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000); 
-// --- 🔥 LÓGICA MÓVIL VS PC ---
-    const isMobile = width < 768; // Consideramos móvil si es menor a 768px
+    cameraRef.current = camera; 
 
-    if (isMobile) {
-        // 📱 MÓVIL: Más cerca (Menor Z) y quizás un poco más abajo (Menor Y)
-        // Juega con el último número: 0.8 o 0.7 para mucho zoom
-        camera.position.set(0, 1.55, 0.75); 
-    } else {
-        // 💻 PC: Configuración normal
-        camera.position.set(0, 1.65, 0.9); 
-    }    // 3. Renderizador
+    // 3. Renderizador
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true; 
@@ -210,43 +226,41 @@ export default function AsistenteFinalAzul() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; 
     controls.dampingFactor = 0.05;
-    controls.enableZoom = true;    
-    controls.minDistance = 0.5;    
-    controls.maxDistance = 4;      
     controls.maxPolarAngle = Math.PI / 2; 
-    controls.target.set(0, 1.55, 0); 
+    controlsRef.current = controls;
 
-// 5. Iluminación (AJUSTADA: Más brillo general sin quemar)
+    // --- ESTADO INICIAL (Usamos los valores del modo FIJO/FRONTAL) ---
+    const isMobile = width < 768;
+    
+    controls.enableZoom = false;
+    controls.enableRotate = false;
+    controls.enablePan = false;
+    
+    // 🔥 VALORES INICIALES CORREGIDOS
+    if (isMobile) {
+        camera.position.set(0, 1.65, 0.85);
+    } else {
+        camera.position.set(0, 1.65, 1.0);
+    }
+    controls.target.set(0, 1.65, 0); // Apuntar a la cara
+    controls.update();
 
-    // --- CAMBIO 1: Aumentar Luz Ambiental ---
-    // Antes estaba en 0.3. La subimos a 0.7.
-    // Esto hace que las sombras más oscuras sean gris claro en lugar de negro,
-    // "levantando" toda la escena.
+    // 5. Iluminación
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
     scene.add(ambientLight);
 
-    // --- CAMBIO 2: Ajustar Luz Principal (Key Light) ---
-    // Mantenemos la intensidad en 1.2 (está bien), pero bajamos un poco su posición Y.
-    // Antes: .set(2, 5, 5) -> Ahora: .set(2, 3.5, 5)
-    // Al bajarla, le da más de lleno en la cara y el pecho, no tanto desde arriba.
     const mainLight = new THREE.DirectionalLight(0xffeebb, 1.2); 
-    mainLight.position.set(2, 3.5, 5); // Posición Y bajada para iluminar mejor el rostro
+    mainLight.position.set(2, 3.5, 5); 
     mainLight.castShadow = true;
     mainLight.shadow.bias = -0.0005;
     mainLight.shadow.mapSize.width = 2048; 
     mainLight.shadow.mapSize.height = 2048;
     scene.add(mainLight);
 
-    // --- CAMBIO 3: Aumentar Luz de Relleno (Hemisphere) ---
-    // Antes estaba en 0.8. La subimos a 1.3.
-    // Esta luz es fundamental en entornos oscuros. Rellena todo el modelo
-    // con una luz suave azulada, haciendo que resalte del fondo.
     const fillLight = new THREE.HemisphereLight(0xddeeff, 0x252550, 1.3); 
     fillLight.position.set(0, 5, -2);
     scene.add(fillLight);
 
-    // --- CAMBIO 4: Luz de Borde (Rim Light) ---
-    // La mantenemos igual, hace un buen trabajo separando el pelo del fondo.
     const rimLight = new THREE.SpotLight(0x00ffff, 2.5); 
     rimLight.position.set(-5, 5, 2);
     rimLight.lookAt(0, 1, 0);
@@ -254,14 +268,9 @@ export default function AsistenteFinalAzul() {
     
     // 6. Suelo
     const floorGeometry = new THREE.CircleGeometry(5, 32);
-    const floorMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x102050, 
-        roughness: 0.3, 
-        metalness: 0.5 
-    });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x102050, roughness: 0.3, metalness: 0.5 });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
     floor.receiveShadow = true;
     scene.add(floor);
 
@@ -279,7 +288,7 @@ export default function AsistenteFinalAzul() {
     // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
-      '/Mary.glb', // Asegúrate de que este sea el nombre correcto del archivo nuevo
+      '/Mary.glb', 
       (gltf) => {
         const model = gltf.scene;
         model.scale.set(1, 1, 1); 
@@ -296,27 +305,17 @@ export default function AsistenteFinalAzul() {
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
 
-        // --- 🔥 AQUÍ ESTÁ EL CAMBIO CLAVE ---
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
-            
-            // 1. ACTIVAR REPOSO (IDLE) AUTOMÁTICAMENTE
-            // Buscamos la animación llamada 'reposo'
             let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
-            
-            // SI NO LA ENCUENTRA: Usamos la primera animación disponible como respaldo (Plan B)
-            if (!reposoClip) {
-                console.log("No encontré 'reposo', usando la primera animación disponible.");
-                reposoClip = animations[0];
-            }
+            if (!reposoClip) reposoClip = animations[0];
 
             if (reposoClip) {
                 const action = mixer.clipAction(reposoClip);
-                action.play(); // <--- ¡ESTO ES LO QUE BAJA LOS BRAZOS!
+                action.play(); 
                 actionsRef.current['reposo'] = action;
             }
 
-            // 2. CONFIGURAR SONRISA (Para usarla después)
             const sonrisaClip = THREE.AnimationClip.findByName(animations, 'sonrisa');
             if (sonrisaClip) {
                 const action = mixer.clipAction(sonrisaClip);
@@ -325,13 +324,11 @@ export default function AsistenteFinalAzul() {
                 actionsRef.current['sonrisa'] = action;
             }
         }
-        // ------------------------------------
-
         scene.add(model);
         characterRef.current = model;
       },
       undefined,
-      (error) => console.error('Error cargando el modelo:', error)
+      (error) => console.error('Error cargando modelo:', error)
     );
 
     // 9. Loop
@@ -362,13 +359,12 @@ export default function AsistenteFinalAzul() {
       if(mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, []); 
+  }, []);
 
-    const handleSubmit = async (textOverride = null) => {
+  const handleSubmit = async (textOverride = null) => {
       const textToSend = textOverride || input;
       if (!textToSend.trim()) return;
 
-      // Si empieza a "pensar", cortamos cualquier audio anterior
       stopSpeaking();
 
       if (actionsRef.current['sonrisa']) {
@@ -395,7 +391,6 @@ export default function AsistenteFinalAzul() {
       });
         
         const data = await response.json();
-        
         if (!response.ok) throw new Error(data.error || data.response || 'Error desconocido');
 
         const botMsg = { role: 'bot', content: data.response, source: data.source, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
@@ -406,10 +401,7 @@ export default function AsistenteFinalAzul() {
 
       } catch (error) {
         console.error("Error frontend:", error);
-        setMessages(prev => [...prev, { 
-            role: 'bot', 
-            content: error.message || 'Error de conexión.' 
-        }]);
+        setMessages(prev => [...prev, { role: 'bot', content: error.message || 'Error de conexión.' }]);
       } finally {
         setIsLoading(false);
       }
@@ -436,13 +428,23 @@ export default function AsistenteFinalAzul() {
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
-                {/* 📍 AQUI ESTÁ CORREGIDO: left-4 asegura que esté a la izquierda */}
                 <div className="absolute top-4 left-4 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
                        {isLoading ? '⚡ PROCESANDO...' : isSpeaking ? '🔊 HABLANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
                     </p>
                 </div>
+
+                <button 
+                  onClick={() => setIsCameraFixed(!isCameraFixed)}
+                  className={`absolute top-4 right-4 z-20 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 border
+                    ${isCameraFixed 
+                        ? 'bg-blue-600/80 text-white border-blue-400 hover:bg-blue-500' 
+                        : 'bg-white/20 text-blue-200 border-white/10 hover:bg-white/30'}`}
+                  title={isCameraFixed ? "Desbloquear Cámara" : "Fijar Cámara"}
+                >
+                   {isCameraFixed ? <Lock size={20} /> : <Unlock size={20} />}
+                </button>
 
             </div>
             <div className="bg-white p-3 md:p-4 border-t border-gray-200 flex justify-between items-center z-20">
@@ -500,7 +502,6 @@ export default function AsistenteFinalAzul() {
            <div className="bg-white/95 backdrop-blur-md p-3 md:p-4 border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-none z-20">
              <div className="flex gap-2 md:gap-3">
                
-               {/* BOTÓN DE SILENCIAR: Solo aparece si isSpeaking es true */}
                {isSpeaking && (
                    <button onClick={stopSpeaking} className="p-3 md:p-4 rounded-full shadow-md flex-none bg-orange-100 text-orange-600 hover:bg-orange-200 transition animate-in fade-in zoom-in">
                       <VolumeX className="w-5 h-5" />
