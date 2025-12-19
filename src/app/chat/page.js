@@ -20,16 +20,20 @@ export default function AsistenteFinalAzul() {
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   
-  // 🎥 ESTADO: True = Cámara Fija (Frontal a la cara), False = Libre
+  // 🎥 ESTADO: True = Cámara Fija, False = Libre
   const [isCameraFixed, setIsCameraFixed] = useState(true)
 
   // --- REFS ---
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
   const characterRef = useRef(null)
+  const faceMeshesRef = useRef([]) 
   const particlesRef = useRef(null)
   const recognitionRef = useRef(null)
   const messagesEndRef = useRef(null)
+  
+  // Ref para sincronizar el estado de hablar dentro del bucle de animación
+  const speakingRef = useRef(false);
 
   // 🎥 REFS THREE.JS
   const cameraRef = useRef(null)
@@ -38,7 +42,6 @@ export default function AsistenteFinalAzul() {
 
   // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
-  const actionsRef = useRef({}) 
   const clockRef = useRef(new THREE.Clock()) 
   const animationFrameRef = useRef(null)
 
@@ -55,6 +58,21 @@ export default function AsistenteFinalAzul() {
     }
     getUser()
   }, [router])
+
+  // --- 🔇 SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
+  useEffect(() => {
+    // 1. Al cargar la página: Mata cualquier audio fantasma
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+
+    // 2. Al desmontar el componente (salir o recargar)
+    return () => {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+    };
+  }, []);
 
   const handleLogout = async () => {
     if(typeof window !== 'undefined' && window.speechSynthesis) {
@@ -82,6 +100,11 @@ export default function AsistenteFinalAzul() {
         index % 2 === 1 ? <strong key={index} className="font-bold text-blue-800">{part}</strong> : part
     );
   };
+
+  // Sincronizar estado de habla con la referencia para Three.js
+  useEffect(() => {
+    speakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   // --- VOZ ---
   useEffect(() => {
@@ -115,6 +138,7 @@ export default function AsistenteFinalAzul() {
 
   const speakText = (text) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    
     window.speechSynthesis.cancel()
 
     const cleanText = text.replace(/\*/g, '');
@@ -131,9 +155,19 @@ export default function AsistenteFinalAzul() {
 
     utterance.rate = 1.0 
     utterance.pitch = 1.1 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    
+    utterance.onstart = () => {
+        setIsSpeaking(true);
+        speakingRef.current = true;
+    };
+    utterance.onend = () => {
+        setIsSpeaking(false);
+        speakingRef.current = false;
+    };
+    utterance.onerror = () => {
+        setIsSpeaking(false);
+        speakingRef.current = false;
+    };
     
     window.speechSynthesis.speak(utterance)
   }
@@ -142,11 +176,12 @@ export default function AsistenteFinalAzul() {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         setIsSpeaking(false);
+        speakingRef.current = false;
     }
   }
 
   // ==========================================
-  // 🎥 1. LÓGICA DE CAMBIO DE MODO DE CÁMARA
+  // 🎥 1. LÓGICA DE CAMARA
   // ==========================================
   useEffect(() => {
     if (!controlsRef.current || !cameraRef.current) return;
@@ -156,24 +191,19 @@ export default function AsistenteFinalAzul() {
     const isMobile = window.innerWidth < 768;
 
     if (isCameraFixed) {
-        // --- MODO FIJO (FRONTAL Y ALTO) ---
         controls.enableZoom = false;
         controls.enableRotate = false;
         controls.enablePan = false; 
         
-        // CORRECCIÓN: Altura de Cámara = Altura del Objetivo (Cara a cara)
         if (isMobile) {
             camera.position.set(0, 1.65, 0.85); 
         } else {
             camera.position.set(0, 1.65, 1.0);  
         }
-        
-        // Apuntar a la cara
         controls.target.set(0, 1.65, 0); 
         controls.update();
 
     } else {
-        // --- MODO LIBRE (MOVIBLE) ---
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.enablePan = true; 
@@ -215,10 +245,8 @@ export default function AsistenteFinalAzul() {
         powerPreference: "high-performance" 
     });
     
-    // HD en móviles
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
     renderer.setSize(width, height);
-    
     renderer.shadowMap.enabled = true; 
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace; 
@@ -236,13 +264,10 @@ export default function AsistenteFinalAzul() {
     controls.maxPolarAngle = Math.PI / 2; 
     controlsRef.current = controls;
 
-    // --- ESTADO INICIAL (Usamos los valores del modo FIJO/FRONTAL) ---
     const isMobile = width < 768;
-    
     controls.enableZoom = false;
     controls.enableRotate = false;
     controls.enablePan = false;
-    
     if (isMobile) {
         camera.position.set(0, 1.65, 0.85);
     } else {
@@ -251,7 +276,7 @@ export default function AsistenteFinalAzul() {
     controls.target.set(0, 1.65, 0); 
     controls.update();
 
-    // 5. Iluminación
+    // 5. Iluminación (TU ORIGINAL)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
     scene.add(ambientLight);
 
@@ -259,7 +284,7 @@ export default function AsistenteFinalAzul() {
     mainLight.position.set(2, 3.5, 5); 
     mainLight.castShadow = true;
     mainLight.shadow.bias = -0.0005;
-    mainLight.shadow.mapSize.width = 2048; 
+    mainLight.shadow.mapSize.width = 2048;
     mainLight.shadow.mapSize.height = 2048;
     scene.add(mainLight);
 
@@ -294,42 +319,43 @@ export default function AsistenteFinalAzul() {
     // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
-      '/Mary.glb', 
+      '/Mary1.glb', 
       (gltf) => {
         const model = gltf.scene;
-        model.scale.set(1, 1, 1); 
-        model.position.set(0, 0, 0); 
-        
+        // Limpiamos el array por si acaso
+        faceMeshesRef.current = [];
+
+        // BUSCAR CARAS PARA LIP SYNC
         model.traverse((child) => {
-            if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
-                if (child.geometry) child.geometry.computeVertexNormals(); 
+            if (child.isMesh && child.morphTargetDictionary) {
+                // Si tiene mouthOpen, lo guardamos en la lista
+                if (Object.keys(child.morphTargetDictionary).some(key => key === 'mouthOpen')) {
+                    console.log("✅ Cara añadida a la lista:", child.name);
+                    faceMeshesRef.current.push(child); // Guardamos TODOS los duplicados
+                }
             }
         });
 
+        model.scale.set(1, 1, 1); 
+        model.position.set(0, 0, 0); 
+
+        // --- 🔥 AQUÍ AGREGAMOS DE NUEVO EL ESTADO DE REPOSO 🔥 ---
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
 
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
+            // Buscamos animación 'reposo', si no hay, la primera que encuentre
             let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
             if (!reposoClip) reposoClip = animations[0];
 
             if (reposoClip) {
                 const action = mixer.clipAction(reposoClip);
-                action.play(); 
-                actionsRef.current['reposo'] = action;
-            }
-
-            const sonrisaClip = THREE.AnimationClip.findByName(animations, 'sonrisa');
-            if (sonrisaClip) {
-                const action = mixer.clipAction(sonrisaClip);
-                action.loop = THREE.LoopOnce; 
-                action.clampWhenFinished = true;
-                actionsRef.current['sonrisa'] = action;
+                action.play(); // ¡Play a la respiración!
             }
         }
+        // ---------------------------------------------------------
+
         scene.add(model);
         characterRef.current = model;
       },
@@ -340,14 +366,46 @@ export default function AsistenteFinalAzul() {
     // 9. Loop
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      const delta = clockRef.current.getDelta();
+      const delta = clockRef.current.getDelta(); // Necesario para el mixer
+
+      // 1. Actualizar Mixer (Animación de Reposo)
       if (mixerRef.current) mixerRef.current.update(delta);
+      
       controls.update();
       if (particlesRef.current) particlesRef.current.rotation.y += 0.001;
+
+      // 2. Animar Boca (Por encima del reposo)
+      if (faceMeshesRef.current.length > 0) {
+          faceMeshesRef.current.forEach((mesh) => {
+              const index = mesh.morphTargetDictionary['mouthOpen'];
+              
+              if (index !== undefined) {
+                  if (speakingRef.current) {
+                      // ✨ TU MATEMÁTICA ORGÁNICA ELEGIDA ✨
+                      const t = Date.now();
+                      
+                      let openValue = 
+                          (Math.sin(t * 0.02) * 0.5) + 
+                          (Math.sin(t * 0.01) * 0.3) + 
+                          (Math.random() * 0.2); 
+
+                      // Mantenemos el límite de 0.8 que te gustó
+                      openValue = Math.max(0, Math.min(0.8, openValue));
+
+                      mesh.morphTargetInfluences[index] = openValue; 
+                      
+                  } else {
+                      // Cierre suave cuando calla
+                      const current = mesh.morphTargetInfluences[index];
+                      mesh.morphTargetInfluences[index] = THREE.MathUtils.lerp(current, 0, 0.2);
+                  }
+              }
+          });
+      }
+
       renderer.render(scene, camera);
     };
     animate();
-
     const handleResize = () => {
         if(mountRef.current && camera && renderer) {
             const w = mountRef.current.clientWidth;
@@ -364,6 +422,11 @@ export default function AsistenteFinalAzul() {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameRef.current);
       if(mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
+      
+      // 🔥 SEGURIDAD: Cancelar voz al desmontar
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
       renderer.dispose();
     };
   }, []);
@@ -373,13 +436,6 @@ export default function AsistenteFinalAzul() {
       if (!textToSend.trim()) return;
 
       stopSpeaking();
-
-      if (actionsRef.current['sonrisa']) {
-          const action = actionsRef.current['sonrisa'];
-          action.reset();
-          action.setLoop(THREE.LoopOnce);
-          action.play();
-      }
 
       const userMsg = { role: 'user', content: textToSend, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
       setMessages(prev => [...prev, userMsg]);
@@ -431,8 +487,7 @@ export default function AsistenteFinalAzul() {
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         
-        {/* 1. CONTENEDOR 3D (RESTAURADO A 45%) */}
-        {/* Se mantiene h-[45dvh] como pediste, pero el contenido de abajo se hará chiquito */}
+        {/* 1. CONTENEDOR 3D */}
         <div className="w-full h-[45dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
@@ -452,7 +507,7 @@ export default function AsistenteFinalAzul() {
                         : 'bg-white/20 text-blue-200 border-white/10 hover:bg-white/30'}`}
                   title={isCameraFixed ? "Desbloquear Cámara" : "Fijar Cámara"}
                 >
-                   {isCameraFixed ? <Lock size={20} /> : <Unlock size={20} />}
+                    {isCameraFixed ? <Lock size={20} /> : <Unlock size={20} />}
                 </button>
 
             </div>
@@ -475,25 +530,15 @@ export default function AsistenteFinalAzul() {
         <div className="w-full flex-1 md:w-1/2 flex flex-col bg-white relative z-10 shadow-2xl overflow-hidden">
            <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
              {messages.length === 0 && (
-               /* 🔥 BIENVENIDA COMPACTA PARA CELULARES */
-               /* Padding vertical muy reducido (py-2) para que quepa bien con el 3D grande */
                <div className="text-center py-2 md:py-12 animate-fade-in-up">
-                 
-                 {/* Icono más pequeño: w-14 h-14 en móvil (antes w-16 o w-20) */}
                  <div className="w-14 h-14 md:w-24 md:h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 md:mb-6 shadow-xl shadow-blue-100">
                    <MessageSquare className="w-6 h-6 md:w-12 md:h-12 text-blue-600" />
                  </div>
-                 
-                 {/* Texto más pequeño: text-lg en móvil (antes text-xl) */}
                  <h2 className="text-lg md:text-2xl font-bold text-gray-800 mb-1 md:mb-3">¡Hola! Soy tu asistente</h2>
-                 
-                 {/* Margen inferior reducido: mb-4 en móvil (antes mb-6) */}
                  <p className="text-xs md:text-base text-gray-600 mb-4 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales.</p>
-                 
-                 {/* Botones más compactos: p-2 en móvil */}
                  <div className="grid grid-cols-1 gap-2 md:gap-3 max-w-md mx-auto px-4">
                    {['¿Cómo solicito una recalificación?', '¿Proceso de titulación?', '¿Cómo estudio en la UG?'].map((q, i) => (
-                     <button key={i} onClick={() => handleSubmit(q)} className="p-2 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700 truncate">
+                     <button key={i} onClick={() => handleSubmit(q)} className="p-2 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-center text-xs md:text-sm text-gray-700 truncate">
                        {q}
                      </button>
                    ))}
