@@ -117,7 +117,7 @@ export default function LoginPage() {
           
           {isInstallable && (
              <p className="text-xs text-blue-600 mt-1 cursor-pointer hover:underline" onClick={handleInstallClick}>
-               ¡Instalar aplicación en tu celular!
+               ¡Instala la aplicación!
              </p>
           )}
         </div>

@@ -470,7 +470,7 @@ export default function AsistenteFinalAzul() {
                  <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-3">¡Hola! Soy tu asistente</h2>
                  <p className="text-sm md:text-base text-gray-600 mb-8 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales. Escríbeme o usa el micrófono.</p>
                  <div className="grid grid-cols-1 gap-3 max-w-md mx-auto px-4">
-                   {['¿En que año se fundó la Universidad?', '¿Quién te programó?', '¿Quién es Kevin?'].map((q, i) => (
+                   {['¿Puedo solicitar una recalificación de notas?', '¿Como es el proceso de titulación?', '¿Como estudio en la Universidad de Guayaquil?'].map((q, i) => (
                      <button key={i} onClick={() => handleSubmit(q)} className="p-3 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700">
                        {q}
                      </button>
