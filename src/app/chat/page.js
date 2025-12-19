@@ -156,19 +156,24 @@ export default function AsistenteFinalAzul() {
     const isMobile = window.innerWidth < 768;
 
     if (isCameraFixed) {
+        // --- MODO FIJO (FRONTAL Y ALTO) ---
         controls.enableZoom = false;
         controls.enableRotate = false;
         controls.enablePan = false; 
         
+        // CORRECCIÓN: Altura de Cámara = Altura del Objetivo (Cara a cara)
         if (isMobile) {
             camera.position.set(0, 1.65, 0.85); 
         } else {
             camera.position.set(0, 1.65, 1.0);  
         }
+        
+        // Apuntar a la cara
         controls.target.set(0, 1.65, 0); 
         controls.update();
 
     } else {
+        // --- MODO LIBRE (MOVIBLE) ---
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.enablePan = true; 
@@ -231,8 +236,9 @@ export default function AsistenteFinalAzul() {
     controls.maxPolarAngle = Math.PI / 2; 
     controlsRef.current = controls;
 
-    // --- ESTADO INICIAL ---
+    // --- ESTADO INICIAL (Usamos los valores del modo FIJO/FRONTAL) ---
     const isMobile = width < 768;
+    
     controls.enableZoom = false;
     controls.enableRotate = false;
     controls.enablePan = false;
@@ -425,9 +431,9 @@ export default function AsistenteFinalAzul() {
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         
-        {/* 1. CONTENEDOR 3D (REDUCIDO EN MÓVIL) */}
-        {/* Cambié h-[45dvh] a h-[38dvh] para dar más espacio al chat en móvil */}
-        <div className="w-full h-[38dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
+        {/* 1. CONTENEDOR 3D (RESTAURADO A 45%) */}
+        {/* Se mantiene h-[45dvh] como pediste, pero el contenido de abajo se hará chiquito */}
+        <div className="w-full h-[45dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
@@ -451,7 +457,6 @@ export default function AsistenteFinalAzul() {
 
             </div>
             <div className="bg-white p-3 md:p-4 border-t border-gray-200 flex justify-between items-center z-20">
-                {/* Agregamos saltos de línea permitidos si no hay espacio */}
                 <p className="text-[10px] text-gray-600 italic leading-tight mr-2">Sistema Inteligente de Respuesta Académica</p>
                 <button
                   onClick={handleLogout}
@@ -470,16 +475,25 @@ export default function AsistenteFinalAzul() {
         <div className="w-full flex-1 md:w-1/2 flex flex-col bg-white relative z-10 shadow-2xl overflow-hidden">
            <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
              {messages.length === 0 && (
-               /* BIENVENIDA COMPACTA: Padding y margenes reducidos en móvil */
-               <div className="text-center py-4 md:py-12 animate-fade-in-up">
-                 <div className="w-16 h-16 md:w-24 md:h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-xl shadow-blue-100">
-                   <MessageSquare className="w-8 h-8 md:w-12 md:h-12 text-blue-600" />
+               /* 🔥 BIENVENIDA COMPACTA PARA CELULARES */
+               /* Padding vertical muy reducido (py-2) para que quepa bien con el 3D grande */
+               <div className="text-center py-2 md:py-12 animate-fade-in-up">
+                 
+                 {/* Icono más pequeño: w-14 h-14 en móvil (antes w-16 o w-20) */}
+                 <div className="w-14 h-14 md:w-24 md:h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 md:mb-6 shadow-xl shadow-blue-100">
+                   <MessageSquare className="w-6 h-6 md:w-12 md:h-12 text-blue-600" />
                  </div>
-                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 md:mb-3">¡Hola! Soy tu asistente</h2>
-                 <p className="text-sm md:text-base text-gray-600 mb-6 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales.</p>
+                 
+                 {/* Texto más pequeño: text-lg en móvil (antes text-xl) */}
+                 <h2 className="text-lg md:text-2xl font-bold text-gray-800 mb-1 md:mb-3">¡Hola! Soy tu asistente</h2>
+                 
+                 {/* Margen inferior reducido: mb-4 en móvil (antes mb-6) */}
+                 <p className="text-xs md:text-base text-gray-600 mb-4 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales.</p>
+                 
+                 {/* Botones más compactos: p-2 en móvil */}
                  <div className="grid grid-cols-1 gap-2 md:gap-3 max-w-md mx-auto px-4">
                    {['¿Cómo solicito una recalificación?', '¿Proceso de titulación?', '¿Cómo estudio en la UG?'].map((q, i) => (
-                     <button key={i} onClick={() => handleSubmit(q)} className="p-3 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700 truncate">
+                     <button key={i} onClick={() => handleSubmit(q)} className="p-2 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-left text-xs md:text-sm text-gray-700 truncate">
                        {q}
                      </button>
                    ))}
@@ -505,7 +519,6 @@ export default function AsistenteFinalAzul() {
              <div ref={messagesEndRef} />
            </div>
            
-           {/* BARRA DE INPUT: Padding bottom extra (pb-6) para celulares sin marco */}
            <div className="bg-white/95 backdrop-blur-md p-3 md:p-4 pb-6 md:pb-4 border-t border-gray-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex-none z-20">
              <div className="flex gap-2 md:gap-3">
                
