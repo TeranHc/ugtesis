@@ -42,6 +42,7 @@ export default function AsistenteFinalAzul() {
 
   // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
+  const actionsRef = useRef({}) // 🔥 Aquí guardaremos las animaciones
   const clockRef = useRef(new THREE.Clock()) 
   const animationFrameRef = useRef(null)
 
@@ -59,14 +60,43 @@ export default function AsistenteFinalAzul() {
     getUser()
   }, [router])
 
+  // --- 🔥 CONTROL DE ANIMACIONES (MODO EXCLUSIVO) 🔥 ---
+  // Esto soluciona el tembleque de ojos apagando una antes de encender la otra
+  useEffect(() => {
+    const baseAction = actionsRef.current['reposo'];
+    const thinkingAction = actionsRef.current['pensando'];
+    
+    if (baseAction && thinkingAction) {
+        if (isLoading) {
+            // --> MODO PENSANDO
+            // 1. Apagamos Reposo por completo (adiós conflicto de ojos)
+            baseAction.stop();
+            
+            // 2. Encendemos Pensando desde cero
+            thinkingAction.reset();
+            thinkingAction.setEffectiveTimeScale(1);
+            thinkingAction.setEffectiveWeight(1);
+            thinkingAction.play();
+
+        } else {
+            // --> MODO REPOSO
+            // 1. Apagamos Pensando
+            thinkingAction.stop();
+
+            // 2. Reactivamos Reposo
+            baseAction.reset();
+            baseAction.setEffectiveTimeScale(1);
+            baseAction.setEffectiveWeight(1);
+            baseAction.play();
+        }
+    }
+  }, [isLoading]); 
+
   // --- 🔇 SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
   useEffect(() => {
-    // 1. Al cargar la página: Mata cualquier audio fantasma
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
-
-    // 2. Al desmontar el componente (salir o recargar)
     return () => {
         if (typeof window !== 'undefined' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
@@ -101,7 +131,6 @@ export default function AsistenteFinalAzul() {
     );
   };
 
-  // Sincronizar estado de habla con la referencia para Three.js
   useEffect(() => {
     speakingRef.current = isSpeaking;
   }, [isSpeaking]);
@@ -138,7 +167,6 @@ export default function AsistenteFinalAzul() {
 
   const speakText = (text) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    
     window.speechSynthesis.cancel()
 
     const cleanText = text.replace(/\*/g, '');
@@ -194,7 +222,6 @@ export default function AsistenteFinalAzul() {
         controls.enableZoom = false;
         controls.enableRotate = false;
         controls.enablePan = false; 
-        
         if (isMobile) {
             camera.position.set(0, 1.65, 0.85); 
         } else {
@@ -202,12 +229,10 @@ export default function AsistenteFinalAzul() {
         }
         controls.target.set(0, 1.65, 0); 
         controls.update();
-
     } else {
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.enablePan = true; 
-        
         if (isMobile) {
             camera.position.set(0, 1.55, 1.1); 
         } else {
@@ -276,7 +301,7 @@ export default function AsistenteFinalAzul() {
     controls.target.set(0, 1.65, 0); 
     controls.update();
 
-    // 5. Iluminación (TU ORIGINAL)
+    // 5. Iluminación
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
     scene.add(ambientLight);
 
@@ -316,22 +341,19 @@ export default function AsistenteFinalAzul() {
     scene.add(particles);
     particlesRef.current = particles;
 
-    // 8. Cargar Modelo
+    // 8. Cargar Modelo (AQUÍ ES DONDE CAPTURAMOS LAS ANIMACIONES)
     const loader = new GLTFLoader();
     loader.load(
-      '/Mary1.glb', 
+      '/Mary2.glb', 
       (gltf) => {
         const model = gltf.scene;
-        // Limpiamos el array por si acaso
         faceMeshesRef.current = [];
 
         // BUSCAR CARAS PARA LIP SYNC
         model.traverse((child) => {
             if (child.isMesh && child.morphTargetDictionary) {
-                // Si tiene mouthOpen, lo guardamos en la lista
                 if (Object.keys(child.morphTargetDictionary).some(key => key === 'mouthOpen')) {
-                    console.log("✅ Cara añadida a la lista:", child.name);
-                    faceMeshesRef.current.push(child); // Guardamos TODOS los duplicados
+                    faceMeshesRef.current.push(child); 
                 }
             }
         });
@@ -339,19 +361,35 @@ export default function AsistenteFinalAzul() {
         model.scale.set(1, 1, 1); 
         model.position.set(0, 0, 0); 
 
-        // --- 🔥 AQUÍ AGREGAMOS DE NUEVO EL ESTADO DE REPOSO 🔥 ---
+        // --- 🔥 CONFIGURACIÓN DE ANIMACIONES 🔥 ---
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
 
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
-            // Buscamos animación 'reposo', si no hay, la primera que encuentre
+            
+            // 1. Buscamos el clip 'reposo' (Si no existe, usa el primero que encuentre)
             let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
-            if (!reposoClip) reposoClip = animations[0];
+            if (!reposoClip) reposoClip = animations[0]; // Backup seguro
 
+            // 2. Buscamos el clip 'pensando'
+            const pensandoClip = THREE.AnimationClip.findByName(animations, 'pensando');
+
+            // 3. Inicializamos REPOSO (Siempre activo al inicio)
             if (reposoClip) {
                 const action = mixer.clipAction(reposoClip);
-                action.play(); // ¡Play a la respiración!
+                action.play();
+                actionsRef.current['reposo'] = action;
+            }
+
+            // 4. Inicializamos PENSANDO (Listo pero pausado)
+            if (pensandoClip) {
+                const action = mixer.clipAction(pensandoClip);
+                action.loop = THREE.LoopRepeat;
+                action.clampWhenFinished = false;
+                actionsRef.current['pensando'] = action;
+            } else {
+                console.log("⚠️ No se encontró la animación 'pensando'");
             }
         }
         // ---------------------------------------------------------
@@ -366,36 +404,30 @@ export default function AsistenteFinalAzul() {
     // 9. Loop
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      const delta = clockRef.current.getDelta(); // Necesario para el mixer
+      const delta = clockRef.current.getDelta();
 
-      // 1. Actualizar Mixer (Animación de Reposo)
+      // 1. Actualizar Mixer
       if (mixerRef.current) mixerRef.current.update(delta);
       
       controls.update();
       if (particlesRef.current) particlesRef.current.rotation.y += 0.001;
 
-      // 2. Animar Boca (Por encima del reposo)
+      // 2. Animar Boca
       if (faceMeshesRef.current.length > 0) {
           faceMeshesRef.current.forEach((mesh) => {
               const index = mesh.morphTargetDictionary['mouthOpen'];
               
               if (index !== undefined) {
                   if (speakingRef.current) {
-                      // ✨ TU MATEMÁTICA ORGÁNICA ELEGIDA ✨
                       const t = Date.now();
-                      
                       let openValue = 
                           (Math.sin(t * 0.02) * 0.5) + 
                           (Math.sin(t * 0.01) * 0.3) + 
                           (Math.random() * 0.2); 
 
-                      // Mantenemos el límite de 0.8 que te gustó
-                      openValue = Math.max(0, Math.min(0.8, openValue));
-
+                      openValue = Math.max(0, Math.min(0.8, openValue)); 
                       mesh.morphTargetInfluences[index] = openValue; 
-                      
                   } else {
-                      // Cierre suave cuando calla
                       const current = mesh.morphTargetInfluences[index];
                       mesh.morphTargetInfluences[index] = THREE.MathUtils.lerp(current, 0, 0.2);
                   }
@@ -422,8 +454,6 @@ export default function AsistenteFinalAzul() {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameRef.current);
       if(mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
-      
-      // 🔥 SEGURIDAD: Cancelar voz al desmontar
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -440,6 +470,8 @@ export default function AsistenteFinalAzul() {
       const userMsg = { role: 'user', content: textToSend, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
       setMessages(prev => [...prev, userMsg]);
       if (!textOverride) setInput('');
+      
+      // 🔥 ACTIVAR PENSANDO 🔥
       setIsLoading(true);
       setEmotion('neutral');
       
@@ -466,6 +498,7 @@ export default function AsistenteFinalAzul() {
         console.error("Error frontend:", error);
         setMessages(prev => [...prev, { role: 'bot', content: error.message || 'Error de conexión.' }]);
       } finally {
+        // 🔥 VOLVER A REPOSO 🔥
         setIsLoading(false);
       }
     };
@@ -495,7 +528,7 @@ export default function AsistenteFinalAzul() {
                 <div className="absolute top-5 left-5 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
-                       {isLoading ? '⚡ PROCESANDO...' : isSpeaking ? '🔊 HABLANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
+                       {isLoading ? '⚡ PENSANDO...' : isSpeaking ? '🔊 HABLANDO...' : isListening ? '🎤 ESCUCHANDO...' : '🤖 EN LÍNEA'}
                     </p>
                 </div>
 
