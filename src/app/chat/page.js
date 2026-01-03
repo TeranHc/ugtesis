@@ -20,6 +20,15 @@ export default function AsistenteFinalAzul() {
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   
+  // ✨ NUEVO: Estado para saber si el modelo 3D ya cargó
+  const [modelReady, setModelReady] = useState(false)
+  
+  // ✨ NUEVO: Ref para asegurar que solo salude una vez
+  const hasGreetedRef = useRef(false)
+
+  // ✨ Estado para mostrar la nube de saludo
+  const [showGreeting, setShowGreeting] = useState(true)
+
   // 🎥 ESTADO: True = Cámara Fija, False = Libre
   const [isCameraFixed, setIsCameraFixed] = useState(true)
 
@@ -60,34 +69,32 @@ export default function AsistenteFinalAzul() {
     getUser()
   }, [router])
 
+  // ✨ Temporizador para ocultar el saludo a los 4 segundos
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        setShowGreeting(false);
+    }, 4000); // 4000ms = 4 segundos
+    return () => clearTimeout(timer);
+  }, []);
+
   // --- 🔥 CONTROL DE ANIMACIONES (MODO EXCLUSIVO) 🔥 ---
-  // Esto soluciona el tembleque de ojos apagando una antes de encender la otra
   useEffect(() => {
     const baseAction = actionsRef.current['reposo'];
     const thinkingAction = actionsRef.current['pensando'];
     
-    if (baseAction && thinkingAction) {
+    // Solo intervenimos si NO se está ejecutando el saludo actualmente
+    // (Para evitar cortar la animación de saludo si el usuario pregunta rápido)
+    const isGreeting = actionsRef.current['saludar']?.isRunning();
+
+    if (baseAction && thinkingAction && !isGreeting) {
         if (isLoading) {
             // --> MODO PENSANDO
-            // 1. Apagamos Reposo por completo (adiós conflicto de ojos)
             baseAction.stop();
-            
-            // 2. Encendemos Pensando desde cero
-            thinkingAction.reset();
-            thinkingAction.setEffectiveTimeScale(1);
-            thinkingAction.setEffectiveWeight(1);
-            thinkingAction.play();
-
+            thinkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
         } else {
             // --> MODO REPOSO
-            // 1. Apagamos Pensando
             thinkingAction.stop();
-
-            // 2. Reactivamos Reposo
-            baseAction.reset();
-            baseAction.setEffectiveTimeScale(1);
-            baseAction.setEffectiveWeight(1);
-            baseAction.play();
+            baseAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
         }
     }
   }, [isLoading]); 
@@ -207,6 +214,59 @@ export default function AsistenteFinalAzul() {
         speakingRef.current = false;
     }
   }
+
+  // ==========================================
+  // ✨ CORRECCIÓN: SALUDO ROBUSTO (Visual + Audio)
+  // ==========================================
+  useEffect(() => {
+    // Solo si el modelo está listo y NO hemos saludado aún
+    if (modelReady && !hasGreetedRef.current) {
+        hasGreetedRef.current = true; 
+
+        // Esperamos un poquito (500ms) para dar tiempo al navegador y evitar bloqueos
+        setTimeout(() => {
+            
+            // 1. FORZAR MOVIMIENTO DE BOCA (Truco visual)
+            // Activamos la boca manualmente para que se mueva aunque el audio falle
+            setIsSpeaking(true);
+            speakingRef.current = true;
+
+            // Apagamos la boca a los 2 segundos (tiempo suficiente para decir "Hola")
+            setTimeout(() => {
+                // Solo apagamos si no está hablando de verdad
+                if (!window.speechSynthesis.speaking) {
+                    setIsSpeaking(false);
+                    speakingRef.current = false;
+                }
+            }, 2000);
+
+            // 2. INTENTAR REPRODUCIR AUDIO
+            speakText("Hola");
+
+            // 3. ANIMACIÓN DE SALUDO (Tu lógica original)
+            const saludarAction = actionsRef.current['saludar'];
+            const reposoAction = actionsRef.current['reposo'];
+
+            if (saludarAction && reposoAction) {
+                // Transición suave: Reposo sale, Saludar entra
+                reposoAction.fadeOut(0.5);
+                saludarAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.5).play();
+
+                const onFinished = (e) => {
+                    if (e.action === saludarAction) {
+                        mixerRef.current.removeEventListener('finished', onFinished);
+                        
+                        // Transición suave de vuelta a Reposo
+                        saludarAction.fadeOut(0.5);
+                        reposoAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.5).play();
+                    }
+                };
+                
+                mixerRef.current.addEventListener('finished', onFinished);
+            }
+        }, 500); // Fin del timeout inicial
+    }
+  }, [modelReady]);
 
   // ==========================================
   // 🎥 1. LÓGICA DE CAMARA
@@ -341,10 +401,10 @@ export default function AsistenteFinalAzul() {
     scene.add(particles);
     particlesRef.current = particles;
 
-    // 8. Cargar Modelo (AQUÍ ES DONDE CAPTURAMOS LAS ANIMACIONES)
+    // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
-      '/Mary2.glb', 
+      '/Mary3.glb', 
       (gltf) => {
         const model = gltf.scene;
         faceMeshesRef.current = [];
@@ -368,34 +428,46 @@ export default function AsistenteFinalAzul() {
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
             
-            // 1. Buscamos el clip 'reposo' (Si no existe, usa el primero que encuentre)
+            // 1. Buscamos el clip 'reposo'
             let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
-            if (!reposoClip) reposoClip = animations[0]; // Backup seguro
+            if (!reposoClip) reposoClip = animations[0]; 
 
             // 2. Buscamos el clip 'pensando'
             const pensandoClip = THREE.AnimationClip.findByName(animations, 'pensando');
 
-            // 3. Inicializamos REPOSO (Siempre activo al inicio)
+            // 3. ✨ NUEVO: Buscamos el clip 'saludar' ✨
+            const saludarClip = THREE.AnimationClip.findByName(animations, 'saludar');
+
+            // Inicializamos REPOSO
             if (reposoClip) {
                 const action = mixer.clipAction(reposoClip);
                 action.play();
                 actionsRef.current['reposo'] = action;
             }
 
-            // 4. Inicializamos PENSANDO (Listo pero pausado)
+            // Inicializamos PENSANDO
             if (pensandoClip) {
                 const action = mixer.clipAction(pensandoClip);
                 action.loop = THREE.LoopRepeat;
                 action.clampWhenFinished = false;
                 actionsRef.current['pensando'] = action;
-            } else {
-                console.log("⚠️ No se encontró la animación 'pensando'");
+            }
+
+            // ✨ NUEVO: Inicializamos SALUDAR
+            if (saludarClip) {
+                const action = mixer.clipAction(saludarClip);
+                action.loop = THREE.LoopOnce; // Importante: Solo una vez
+                action.clampWhenFinished = true; // Que no se resetee bruscamente
+                actionsRef.current['saludar'] = action;
             }
         }
         // ---------------------------------------------------------
 
         scene.add(model);
         characterRef.current = model;
+        
+        // ✨ Avisamos que el modelo ya cargó
+        setModelReady(true);
       },
       undefined,
       (error) => console.error('Error cargando modelo:', error)
@@ -454,6 +526,7 @@ export default function AsistenteFinalAzul() {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameRef.current);
       if(mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
+      
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -525,6 +598,17 @@ export default function AsistenteFinalAzul() {
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
+                {/* ✨ NUEVO: Nube de Texto (HTML Flotante) ✨ */}
+                {showGreeting && (
+                    <div className="absolute top-[20%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 animate-[bounce_2s_infinite]">
+                        <div className="relative bg-white text-gray-800 px-5 py-3 rounded-2xl shadow-2xl border-2 border-blue-100">
+                            <p className="text-sm font-bold whitespace-nowrap">¡Hola! Estoy lista 👋</p>
+                            {/* Triángulo del globo */}
+                            <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white"></div>
+                        </div>
+                    </div>
+                )}
+                
                 <div className="absolute top-5 left-5 z-20 text-left pointer-events-none">
                     <h2 className="text-xl font-bold text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]">MARY AI</h2>
                     <p className="text-blue-200 text-xs font-mono">
@@ -555,7 +639,6 @@ export default function AsistenteFinalAzul() {
                              border border-red-300/40">
                   <LogOut className="w-3 h-3 md:w-4 md:h-4" /> Salir
                 </button>
-
             </div>
         </div>
 
