@@ -78,26 +78,34 @@ export default function AsistenteFinalAzul() {
   }, []);
 
   // --- 🔥 CONTROL DE ANIMACIONES (MODO EXCLUSIVO) 🔥 ---
+  // AQUI ES DONDE SE HIZO EL CAMBIO PRINCIPAL
   useEffect(() => {
     const baseAction = actionsRef.current['reposo'];
     const thinkingAction = actionsRef.current['pensando'];
+    const talkingAction = actionsRef.current['respuesta']; // ✨ ANIMACIÓN RESPUESTA
     
     // Solo intervenimos si NO se está ejecutando el saludo actualmente
-    // (Para evitar cortar la animación de saludo si el usuario pregunta rápido)
     const isGreeting = actionsRef.current['saludar']?.isRunning();
 
-    if (baseAction && thinkingAction && !isGreeting) {
-        if (isLoading) {
-            // --> MODO PENSANDO
-            baseAction.stop();
-            thinkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
-        } else {
-            // --> MODO REPOSO
-            thinkingAction.stop();
-            baseAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
+    if (!isGreeting) {
+        if (isSpeaking && talkingAction) {
+            // --> MODO HABLANDO (RESPUESTA) - Prioridad 1
+            baseAction?.fadeOut(0.2);
+            thinkingAction?.fadeOut(0.2);
+            talkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
+        } else if (isLoading && thinkingAction) {
+            // --> MODO PENSANDO - Prioridad 2
+            baseAction?.fadeOut(0.2);
+            talkingAction?.fadeOut(0.2);
+            thinkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
+        } else if (baseAction) {
+            // --> MODO REPOSO - Prioridad 3 (Default)
+            thinkingAction?.fadeOut(0.2);
+            talkingAction?.fadeOut(0.2);
+            baseAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
         }
     }
-  }, [isLoading]); 
+  }, [isLoading, isSpeaking]); // ✨ Agregamos isSpeaking a las dependencias
 
   // --- 🔇 SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
   useEffect(() => {
@@ -435,8 +443,11 @@ export default function AsistenteFinalAzul() {
             // 2. Buscamos el clip 'pensando'
             const pensandoClip = THREE.AnimationClip.findByName(animations, 'pensando');
 
-            // 3. ✨ NUEVO: Buscamos el clip 'saludar' ✨
+            // 3. Buscamos el clip 'saludar'
             const saludarClip = THREE.AnimationClip.findByName(animations, 'saludar');
+
+            // 4. ✨ NUEVO: Buscamos el clip 'respuesta'
+            const respuestaClip = THREE.AnimationClip.findByName(animations, 'respuesta');
 
             // Inicializamos REPOSO
             if (reposoClip) {
@@ -453,12 +464,20 @@ export default function AsistenteFinalAzul() {
                 actionsRef.current['pensando'] = action;
             }
 
-            // ✨ NUEVO: Inicializamos SALUDAR
+            // Inicializamos SALUDAR
             if (saludarClip) {
                 const action = mixer.clipAction(saludarClip);
-                action.loop = THREE.LoopOnce; // Importante: Solo una vez
-                action.clampWhenFinished = true; // Que no se resetee bruscamente
+                action.loop = THREE.LoopOnce; 
+                action.clampWhenFinished = true; 
                 actionsRef.current['saludar'] = action;
+            }
+
+            // ✨ NUEVO: Inicializamos RESPUESTA
+            if (respuestaClip) {
+                const action = mixer.clipAction(respuestaClip);
+                action.loop = THREE.LoopRepeat; // Generalmente se repite mientras habla
+                action.clampWhenFinished = false; 
+                actionsRef.current['respuesta'] = action;
             }
         }
         // ---------------------------------------------------------
@@ -564,14 +583,14 @@ export default function AsistenteFinalAzul() {
         const botMsg = { role: 'bot', content: data.response, source: data.source, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
         setMessages(prev => [...prev, botMsg]);
         setEmotion('happy'); 
-        speakText(data.response);
+        speakText(data.response); // Esto activará isSpeaking -> respuesta
         setTimeout(() => setEmotion('neutral'), 3000);
 
       } catch (error) {
         console.error("Error frontend:", error);
         setMessages(prev => [...prev, { role: 'bot', content: error.message || 'Error de conexión.' }]);
       } finally {
-        // 🔥 VOLVER A REPOSO 🔥
+        // 🔥 VOLVER A REPOSO (o respuesta si sigue hablando) 🔥
         setIsLoading(false);
       }
     };
