@@ -1,157 +1,125 @@
-// src/app/api/admin/chat/route.js
+// src/app/api/chat/route.js
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
+
 export async function POST(req) {
   try {
-    // ==========================================
-    // 🔒 PROTECCIÓN 0: CANDADO DE SEGURIDAD (NUEVO)
-    // ==========================================
-    // Verificamos si la petición trae la "contraseña" desde el Frontend.
-    // Si eres un bot de Vercel y no tienes la clave: TE BLOQUEAMOS AQUÍ (Costo 0).
-    const secretHeader = req.headers.get('x-secret-key')
-    
-    // Aquí usamos la clave que definimos. Si no has creado la variable en Vercel aún, 
-    // usará la frase fija por defecto para que te funcione ya.
-    const mySecret = process.env.APP_SECRET_KEY || 'tesis-segura-2025-guayaquil-bloqueo'
+    // 🔒 PROTECCIÓN: VALIDACIÓN DE SESIÓN
+    const authHeader = req.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
 
-    if (secretHeader !== mySecret) {
-       return NextResponse.json({ 
-         error: "Acceso denegado: No tienes autorización para usar esta API." 
-       }, { status: 401 })
-    }
+    if (!token) return NextResponse.json({ error: "No token" }, { status: 401 })
 
-    // ==========================================
-    // 🛡️ PROTECCIÓN 1: VALIDACIONES BÁSICAS
-    // ==========================================
-    const apiKey = process.env.GEMINI_API_KEY || ""
-    if (!apiKey) throw new Error('Falta la GEMINI_API_KEY')
-
-    const body = await req.json()
-    const { message, userId } = body
-
-    if (!message || message.trim().length === 0) {
-      return NextResponse.json({ 
-        response: "Por favor, escribe una pregunta válida.",
-        source: "Sistema"
-      })
-    }
-
-    // ==========================================
-    // ⚙️ CONFIGURACIÓN INICIAL
-    // ==========================================
-    const genAI = new GoogleGenerativeAI(apiKey)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     )
 
-    // ==========================================
-    // 🧠 FASE 1: GENERAR EMBEDDING (VECTOR)
-    // ==========================================
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 })
+    
+    const verifiedUserId = user.id
+
+    // 🛡️ VALIDACIONES BÁSICAS
+    const apiKey = process.env.GEMINI_API_KEY || ""
+    const body = await req.json()
+    const { message, history } = body 
+
+    if (!message) return NextResponse.json({ response: "Pregunta vacía" })
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+
+    // 🧠 FASE 1: EMBEDDING
     const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
     const embeddingResult = await embeddingModel.embedContent(message)
     const vectorUsuario = embeddingResult.embedding.values
 
-    // ==========================================
-    // 🧠 FASE 1.5: VERIFICAR CACHÉ (MEMORIA)
-    // ==========================================
-    const { data: memoriaEncontrada } = await supabase
-      .rpc('buscar_similares', {
-        query_embedding: vectorUsuario,
-        match_threshold: 0.90, 
-        match_count: 1
-      })
-
-    if (memoriaEncontrada && memoriaEncontrada.length > 0) {
-      console.log('⚡ MEMORIA: Respuesta reutilizada del caché')
-      return NextResponse.json({ 
-        response: memoriaEncontrada[0].respuesta_bot,
-        source: 'Memoria Inteligente (Cache)' 
-      })
-    }
-
-    // ==========================================
-    // 🔍 FASE 2: BÚSQUEDA SEMÁNTICA (VECTORES)
-    // ==========================================
-    const { data: documentos, error } = await supabase
+    // 🔍 FASE 2: BÚSQUEDA SEMÁNTICA
+    const { data: documentos } = await supabase
       .rpc('match_documents', {
         query_embedding: vectorUsuario, 
         match_threshold: 0.50, 
         match_count: 5 
       })
 
-    if (error) console.error('Error Supabase:', error)
+    // --- DETECCIÓN DE CONTEXTO ---
+    const hayInformacion = documentos && documentos.length > 0;
+    
+    let contexto = "";
+    let sourceLabel = "";
 
-    let contexto = ""
-    let sourceLabel = "Base de Conocimiento"
-
-    if (documentos && documentos.length > 0) {
+    if (hayInformacion) {
       contexto = documentos.map(doc => 
         `-- REGLAMENTO: ${doc.titulo} (${doc.categoria}) --\n${doc.contenido}\n`
-      ).join('\n\n')
+      ).join('\n\n');
+      sourceLabel = "Reglamento Oficial";
     } else {
-      contexto = "No se encontró información relevante en los reglamentos."
-      sourceLabel = "Conocimiento General (Advertencia: Puede no ser exacto)"
+      contexto = ""; 
+      sourceLabel = "Sin información oficial";
     }
 
-    // ==========================================
-    // 🤖 FASE 3: GENERACIÓN CON GEMINI
-    // ==========================================
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+    // --- 🤖 FASE 3: GENERACIÓN (JSON MODE) ---
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json" } 
+    })
     
-    // MANTENIDO: Tu prompt original exacto
+    const historialTexto = history ? history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n') : "";
+
+    // --- 🔥 PROMPT CON RESTRICCIÓN DE SUGERENCIAS 🔥 ---
     const prompt = `
-      Eres el Asistente Académico Oficial de la Universidad de Guayaquil.
+      Eres Mary AI, asistente oficial de la Universidad de Guayaquil.
       
-      TU OBJETIVO: Responder preguntas sobre reglamentos basándote EXCLUSIVAMENTE en el contexto proporcionado.
-
-      CONTEXTO RECUPERADO:
+      ESTADO DE INFORMACIÓN: ${hayInformacion ? "✅ DATOS ENCONTRADOS" : "❌ DATOS NO ENCONTRADOS"}
+      
+      CONTEXTO RECUPERADO (SOLO PUEDES USAR ESTO):
       ${contexto}
+      
+      HISTORIAL: ${historialTexto}
+      PREGUNTA: "${message}"
 
-      PREGUNTA DEL USUARIO: "${message}"
+      TU MISIÓN:
+      Responder la pregunta y sugerir 3 dudas siguientes.
+      
+      ⚠️ REGLA DE ORO PARA SUGERENCIAS (MUY IMPORTANTE):
+      1. Las 'sugerencias' deben estar basadas 100% en el CONTEXTO RECUPERADO. 
+      2. NO sugieras temas que no aparezcan en el texto de arriba. Si el texto habla de 'Matrículas', sugiere 'Fechas de matrícula', NO sugieras 'Becas' si no hay texto de becas.
+      3. Si NO hay información (Estado ❌), tus sugerencias deben ser SOLO: ["¿Qué reglamentos tienes?", "¿Horarios de atención?", "¿Ubicación de secretaría?"].
+      4. Si SÍ hay información, sugiere detalles profundos que estén en ese mismo texto (ej: plazos, artículos relacionados, requisitos mencionados).
 
-      INSTRUCCIONES:
-      1. Analiza el contexto. Si encuentras la respuesta, explícala claramente.
-      2. CITA LA FUENTE: Siempre menciona qué reglamento o artículo usaste (ej: "Según el Art. 22 del Reglamento...").
-      3. Si el contexto dice "No se encontró información", responde: "Lo siento, no tengo información sobre ese tema específico en mis reglamentos actuales."
-      4. No inventes artículos ni leyes que no estén en el texto.
+      FORMATO JSON OBLIGATORIO:
+      {
+        "respuesta": "Texto de respuesta amable, citando artículos si existen...",
+        "sugerencias": ["Sugerencia Segura 1", "Sugerencia Segura 2", "Sugerencia Segura 3"]
+      }
     `
 
     const result = await model.generateContent(prompt)
-    const responseText = result.response.text()
-
-    // ==========================================
+    const jsonResponse = JSON.parse(result.response.text());
+    
     // 💾 FASE 4: GUARDADO DE LOGS
-    // ==========================================
-    if (userId) {
+    if (verifiedUserId) {
        await supabase.from('logs_consultas').insert([{
-        usuario_id: userId,
+        usuario_id: verifiedUserId,
         pregunta: message,
-        respuesta_bot: responseText,
-        embedding: vectorUsuario
+        respuesta_bot: jsonResponse.respuesta, 
+        embedding: vectorUsuario,
+        tiene_contexto: hayInformacion
       }])
     }
 
     return NextResponse.json({ 
-      response: responseText,
+      response: jsonResponse.respuesta,
+      suggestions: jsonResponse.sugerencias,
       source: sourceLabel
     })
 
   } catch (error) {
-    console.error('🔴 ERROR:', error)
-    
-    // 🛡️ PROTECCIÓN 2: Manejo de Cuota Excedida (Error 429)
-    if (error.message && (error.message.includes('429') || error.message.includes('Quota'))) {
-        return NextResponse.json({ 
-            response: "El sistema está recibiendo demasiadas consultas en este momento (Límite de API alcanzado). Por favor, intenta de nuevo en unos minutos.",
-            source: "Sistema (Sobrecarga Temporal)"
-        })
-    }
-
+    console.error(error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

@@ -20,16 +20,16 @@ export default function AsistenteFinalAzul() {
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   
-  // ✨ NUEVO: Estado para saber si el modelo 3D ya cargó
+  // Estado para saber si el modelo 3D ya cargó
   const [modelReady, setModelReady] = useState(false)
   
-  // ✨ NUEVO: Ref para asegurar que solo salude una vez
+  // Ref para asegurar que solo salude una vez
   const hasGreetedRef = useRef(false)
 
-  // ✨ Estado para mostrar la nube de saludo
+  // Estado para mostrar la nube de saludo
   const [showGreeting, setShowGreeting] = useState(true)
 
-  // 🎥 ESTADO: True = Cámara Fija, False = Libre
+  // ESTADO CÁMARA: True = Cámara Fija, False = Libre
   const [isCameraFixed, setIsCameraFixed] = useState(true)
 
   // --- REFS ---
@@ -44,14 +44,14 @@ export default function AsistenteFinalAzul() {
   // Ref para sincronizar el estado de hablar dentro del bucle de animación
   const speakingRef = useRef(false);
 
-  // 🎥 REFS THREE.JS
+  // REFS THREE.JS
   const cameraRef = useRef(null)
   const controlsRef = useRef(null)
   const rendererRef = useRef(null) 
 
   // REFS ANIMACIÓN
   const mixerRef = useRef(null) 
-  const actionsRef = useRef({}) // 🔥 Aquí guardaremos las animaciones
+  const actionsRef = useRef({}) 
   const clockRef = useRef(new THREE.Clock()) 
   const animationFrameRef = useRef(null)
 
@@ -69,45 +69,40 @@ export default function AsistenteFinalAzul() {
     getUser()
   }, [router])
 
-  // ✨ Temporizador para ocultar el saludo a los 4 segundos
+  // Temporizador para ocultar el saludo a los 4 segundos
   useEffect(() => {
     const timer = setTimeout(() => {
         setShowGreeting(false);
-    }, 4000); // 4000ms = 4 segundos
+    }, 4000);
     return () => clearTimeout(timer);
   }, []);
 
-  // --- 🔥 CONTROL DE ANIMACIONES (MODO EXCLUSIVO) 🔥 ---
-  // AQUI ES DONDE SE HIZO EL CAMBIO PRINCIPAL
+  // --- CONTROL DE ANIMACIONES (MODO EXCLUSIVO) ---
   useEffect(() => {
     const baseAction = actionsRef.current['reposo'];
     const thinkingAction = actionsRef.current['pensando'];
-    const talkingAction = actionsRef.current['respuesta']; // ✨ ANIMACIÓN RESPUESTA
+    const talkingAction = actionsRef.current['respuesta']; 
     
-    // Solo intervenimos si NO se está ejecutando el saludo actualmente
     const isGreeting = actionsRef.current['saludar']?.isRunning();
 
     if (!isGreeting) {
         if (isSpeaking && talkingAction) {
-            // --> MODO HABLANDO (RESPUESTA) - Prioridad 1
             baseAction?.fadeOut(0.2);
             thinkingAction?.fadeOut(0.2);
             talkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
         } else if (isLoading && thinkingAction) {
-            // --> MODO PENSANDO - Prioridad 2
             baseAction?.fadeOut(0.2);
             talkingAction?.fadeOut(0.2);
             thinkingAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
         } else if (baseAction) {
-            // --> MODO REPOSO - Prioridad 3 (Default)
             thinkingAction?.fadeOut(0.2);
             talkingAction?.fadeOut(0.2);
             baseAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.2).play();
         }
     }
-  }, [isLoading, isSpeaking]); // ✨ Agregamos isSpeaking a las dependencias
+  }, [isLoading, isSpeaking]);
 
-  // --- 🔇 SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
+  // --- SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -150,7 +145,7 @@ export default function AsistenteFinalAzul() {
     speakingRef.current = isSpeaking;
   }, [isSpeaking]);
 
-  // --- VOZ ---
+  // --- VOZ (ENTRADA) ---
   useEffect(() => {
     if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -180,39 +175,53 @@ export default function AsistenteFinalAzul() {
     }
   }
 
+  // --- VOZ (SALIDA): FRAGMENTACIÓN ---
   const speakText = (text) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    window.speechSynthesis.cancel()
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
 
     const cleanText = text.replace(/\*/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText)
-    
-    const voices = window.speechSynthesis.getVoices()
-    const spanishVoices = voices.filter(v => v.lang.includes('es'))
-    let femaleVoice = spanishVoices.find(v => 
-        v.name.includes('Sabina') || v.name.includes('Paulina') || v.name.includes('Google español')
-    )
+    const chunks = cleanText.match(/[^.?;!]+[.?;!]*|[^.?;!]+/g) || [cleanText];
+    let currentChunk = 0;
 
-    if (femaleVoice) utterance.voice = femaleVoice
-    else if (spanishVoices.length > 0) utterance.voice = spanishVoices[0]
+    const playNextChunk = () => {
+      if (currentChunk >= chunks.length) {
+          setIsSpeaking(false);
+          speakingRef.current = false;
+          return;
+      }
 
-    utterance.rate = 1.0 
-    utterance.pitch = 1.1 
-    
-    utterance.onstart = () => {
-        setIsSpeaking(true);
-        speakingRef.current = true;
-    };
-    utterance.onend = () => {
-        setIsSpeaking(false);
-        speakingRef.current = false;
-    };
-    utterance.onerror = () => {
-        setIsSpeaking(false);
-        speakingRef.current = false;
-    };
-    
-    window.speechSynthesis.speak(utterance)
+      const utterance = new SpeechSynthesisUtterance(chunks[currentChunk].trim());
+      
+      const voices = window.speechSynthesis.getVoices();
+      const spanishVoices = voices.filter(v => v.lang.includes('es'));
+      let femaleVoice = spanishVoices.find(v => 
+          v.name.includes('Sabina') || v.name.includes('Paulina') || v.name.includes('Google español')
+      );
+
+      if (femaleVoice) utterance.voice = femaleVoice;
+      else if (spanishVoices.length > 0) utterance.voice = spanishVoices[0];
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.1;
+      
+      utterance.onstart = () => {
+          setIsSpeaking(true);
+          speakingRef.current = true;
+      };
+      utterance.onend = () => {
+          currentChunk++;
+          setTimeout(playNextChunk, 50); 
+      };
+      utterance.onerror = () => {
+          setIsSpeaking(false);
+          speakingRef.current = false;
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    }
+
+    playNextChunk();
   }
 
   const stopSpeaking = () => {
@@ -223,62 +232,45 @@ export default function AsistenteFinalAzul() {
     }
   }
 
-  // ==========================================
-  // ✨ CORRECCIÓN: SALUDO ROBUSTO (Visual + Audio)
-  // ==========================================
+  // --- SALUDO ROBUSTO ---
   useEffect(() => {
-    // Solo si el modelo está listo y NO hemos saludado aún
     if (modelReady && !hasGreetedRef.current) {
         hasGreetedRef.current = true; 
 
-        // Esperamos un poquito (500ms) para dar tiempo al navegador y evitar bloqueos
         setTimeout(() => {
-            
-            // 1. FORZAR MOVIMIENTO DE BOCA (Truco visual)
-            // Activamos la boca manualmente para que se mueva aunque el audio falle
             setIsSpeaking(true);
             speakingRef.current = true;
 
-            // Apagamos la boca a los 2 segundos (tiempo suficiente para decir "Hola")
             setTimeout(() => {
-                // Solo apagamos si no está hablando de verdad
                 if (!window.speechSynthesis.speaking) {
                     setIsSpeaking(false);
                     speakingRef.current = false;
                 }
             }, 2000);
 
-            // 2. INTENTAR REPRODUCIR AUDIO
             speakText("Hola");
 
-            // 3. ANIMACIÓN DE SALUDO (Tu lógica original)
             const saludarAction = actionsRef.current['saludar'];
             const reposoAction = actionsRef.current['reposo'];
 
             if (saludarAction && reposoAction) {
-                // Transición suave: Reposo sale, Saludar entra
                 reposoAction.fadeOut(0.5);
                 saludarAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.5).play();
 
                 const onFinished = (e) => {
                     if (e.action === saludarAction) {
                         mixerRef.current.removeEventListener('finished', onFinished);
-                        
-                        // Transición suave de vuelta a Reposo
                         saludarAction.fadeOut(0.5);
                         reposoAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(0.5).play();
                     }
                 };
-                
                 mixerRef.current.addEventListener('finished', onFinished);
             }
-        }, 500); // Fin del timeout inicial
+        }, 500);
     }
   }, [modelReady]);
 
-  // ==========================================
-  // 🎥 1. LÓGICA DE CAMARA
-  // ==========================================
+  // --- LÓGICA DE CÁMARA ---
   useEffect(() => {
     if (!controlsRef.current || !cameraRef.current) return;
 
@@ -312,26 +304,21 @@ export default function AsistenteFinalAzul() {
   }, [isCameraFixed]) 
 
 
-  // ==========================================
-  // 🎨 THREE.JS: ESCENA 3D
-  // ==========================================
+  // --- THREE.JS: ESCENA 3D ---
   useEffect(() => {
     if (!mountRef.current) return
 
-    // 1. Escena
     const scene = new THREE.Scene();
     const deepBlue = 0x051535; 
     scene.fog = new THREE.Fog(deepBlue, 5, 20); 
     scene.background = new THREE.Color(deepBlue);
     sceneRef.current = scene;
 
-    // 2. Cámara
     const width = mountRef.current.clientWidth;
     const height = mountRef.current.clientHeight;
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000); 
     cameraRef.current = camera; 
 
-    // 3. Renderizador
     const renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
         alpha: true,
@@ -350,7 +337,6 @@ export default function AsistenteFinalAzul() {
     mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 4. Controles
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; 
     controls.dampingFactor = 0.05;
@@ -369,7 +355,6 @@ export default function AsistenteFinalAzul() {
     controls.target.set(0, 1.65, 0); 
     controls.update();
 
-    // 5. Iluminación
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
     scene.add(ambientLight);
 
@@ -390,7 +375,6 @@ export default function AsistenteFinalAzul() {
     rimLight.lookAt(0, 1, 0);
     scene.add(rimLight);
     
-    // 6. Suelo
     const floorGeometry = new THREE.CircleGeometry(5, 32);
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x102050, roughness: 0.3, metalness: 0.5 });
     const floor = new THREE.Mesh(floorGeometry, floorMaterial);
@@ -398,7 +382,6 @@ export default function AsistenteFinalAzul() {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // 7. Partículas
     const particlesGeometry = new THREE.BufferGeometry();
     const particlesCount = 200;
     const positions = new Float32Array(particlesCount * 3);
@@ -409,7 +392,6 @@ export default function AsistenteFinalAzul() {
     scene.add(particles);
     particlesRef.current = particles;
 
-    // 8. Cargar Modelo
     const loader = new GLTFLoader();
     loader.load(
       '/Mary3.glb', 
@@ -417,7 +399,6 @@ export default function AsistenteFinalAzul() {
         const model = gltf.scene;
         faceMeshesRef.current = [];
 
-        // BUSCAR CARAS PARA LIP SYNC
         model.traverse((child) => {
             if (child.isMesh && child.morphTargetDictionary) {
                 if (Object.keys(child.morphTargetDictionary).some(key => key === 'mouthOpen')) {
@@ -429,81 +410,58 @@ export default function AsistenteFinalAzul() {
         model.scale.set(1, 1, 1); 
         model.position.set(0, 0, 0); 
 
-        // --- 🔥 CONFIGURACIÓN DE ANIMACIONES 🔥 ---
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
 
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
-            
-            // 1. Buscamos el clip 'reposo'
             let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
             if (!reposoClip) reposoClip = animations[0]; 
 
-            // 2. Buscamos el clip 'pensando'
             const pensandoClip = THREE.AnimationClip.findByName(animations, 'pensando');
-
-            // 3. Buscamos el clip 'saludar'
             const saludarClip = THREE.AnimationClip.findByName(animations, 'saludar');
-
-            // 4. ✨ NUEVO: Buscamos el clip 'respuesta'
             const respuestaClip = THREE.AnimationClip.findByName(animations, 'respuesta');
 
-            // Inicializamos REPOSO
             if (reposoClip) {
                 const action = mixer.clipAction(reposoClip);
                 action.play();
                 actionsRef.current['reposo'] = action;
             }
-
-            // Inicializamos PENSANDO
             if (pensandoClip) {
                 const action = mixer.clipAction(pensandoClip);
                 action.loop = THREE.LoopRepeat;
-                action.clampWhenFinished = false;
                 actionsRef.current['pensando'] = action;
             }
-
-            // Inicializamos SALUDAR
             if (saludarClip) {
                 const action = mixer.clipAction(saludarClip);
                 action.loop = THREE.LoopOnce; 
                 action.clampWhenFinished = true; 
                 actionsRef.current['saludar'] = action;
             }
-
-            // ✨ NUEVO: Inicializamos RESPUESTA
             if (respuestaClip) {
                 const action = mixer.clipAction(respuestaClip);
-                action.loop = THREE.LoopRepeat; // Generalmente se repite mientras habla
-                action.clampWhenFinished = false; 
+                action.loop = THREE.LoopRepeat; 
                 actionsRef.current['respuesta'] = action;
             }
         }
-        // ---------------------------------------------------------
 
         scene.add(model);
         characterRef.current = model;
-        
-        // ✨ Avisamos que el modelo ya cargó
         setModelReady(true);
       },
       undefined,
       (error) => console.error('Error cargando modelo:', error)
     );
 
-    // 9. Loop
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
       const delta = clockRef.current.getDelta();
 
-      // 1. Actualizar Mixer
       if (mixerRef.current) mixerRef.current.update(delta);
       
       controls.update();
       if (particlesRef.current) particlesRef.current.rotation.y += 0.001;
 
-      // 2. Animar Boca
       if (faceMeshesRef.current.length > 0) {
           faceMeshesRef.current.forEach((mesh) => {
               const index = mesh.morphTargetDictionary['mouthOpen'];
@@ -529,6 +487,7 @@ export default function AsistenteFinalAzul() {
       renderer.render(scene, camera);
     };
     animate();
+    
     const handleResize = () => {
         if(mountRef.current && camera && renderer) {
             const w = mountRef.current.clientWidth;
@@ -553,47 +512,68 @@ export default function AsistenteFinalAzul() {
     };
   }, []);
 
+  // --- SUBMIT: CON TOKEN + HISTORIAL + SUGERENCIAS ---
   const handleSubmit = async (textOverride = null) => {
-      const textToSend = textOverride || input;
-      if (!textToSend.trim()) return;
+    const textToSend = textOverride || input;
+    if (!textToSend.trim()) return;
 
-      stopSpeaking();
+    stopSpeaking();
 
-      const userMsg = { role: 'user', content: textToSend, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
-      setMessages(prev => [...prev, userMsg]);
-      if (!textOverride) setInput('');
-      
-      // 🔥 ACTIVAR PENSANDO 🔥
-      setIsLoading(true);
-      setEmotion('neutral');
-      
-      try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'x-secret-key': 'tesis-segura-2025-guayaquil-bloqueo' 
-        },
-        body: JSON.stringify({ message: textToSend, userId: userId })
-      });
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    // Creamos el mensaje del usuario
+    const userMsg = { 
+        role: 'user', 
+        content: textToSend, 
+        time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) 
+    };
+
+    // Actualizamos la vista inmediatamente
+    setMessages(prev => [...prev, userMsg]);
+    if (!textOverride) setInput('');
+    
+    setIsLoading(true);
+    
+    try {
+        // Historial (Memoria)
+        const chatHistory = messages.slice(-6).map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content }]
+        }));
+
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ 
+                message: textToSend, 
+                history: chatHistory, 
+                userId: userId 
+            })
+        });
         
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || data.response || 'Error desconocido');
+        if (!response.ok) throw new Error(data.error || 'Error en la respuesta');
 
-        const botMsg = { role: 'bot', content: data.response, source: data.source, time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) };
+        const botMsg = { 
+            role: 'bot', 
+            content: data.response, 
+            source: data.source,
+            suggestions: data.suggestions, // <--- GUARDAMOS LAS SUGERENCIAS DEL JSON
+            time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) 
+        };
         setMessages(prev => [...prev, botMsg]);
-        setEmotion('happy'); 
-        speakText(data.response); // Esto activará isSpeaking -> respuesta
-        setTimeout(() => setEmotion('neutral'), 3000);
+        speakText(data.response);
 
-      } catch (error) {
-        console.error("Error frontend:", error);
-        setMessages(prev => [...prev, { role: 'bot', content: error.message || 'Error de conexión.' }]);
-      } finally {
-        // 🔥 VOLVER A REPOSO (o respuesta si sigue hablando) 🔥
+    } catch (error) {
+        setMessages(prev => [...prev, { role: 'bot', content: "Error de conexión." }]);
+    } finally {
         setIsLoading(false);
-      }
-    };
+    }
+  };
 
   // --- JSX ---
   return (
@@ -612,17 +592,15 @@ export default function AsistenteFinalAzul() {
 
       <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         
-        {/* 1. CONTENEDOR 3D */}
+        {/* CONTENEDOR 3D */}
         <div className="w-full h-[45dvh] md:w-1/2 md:h-auto flex flex-col relative border-b md:border-r md:border-b-0 border-gray-200 shrink-0">
             <div className="flex-1 relative bg-gradient-to-br from-blue-950 via-slate-900 to-blue-950">
                 <div ref={mountRef} className="absolute inset-0 w-full h-full cursor-move z-0" />
                 
-                {/* ✨ NUEVO: Nube de Texto (HTML Flotante) ✨ */}
                 {showGreeting && (
                     <div className="absolute top-[20%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 animate-[bounce_2s_infinite]">
                         <div className="relative bg-white text-gray-800 px-5 py-3 rounded-2xl shadow-2xl border-2 border-blue-100">
                             <p className="text-sm font-bold whitespace-nowrap">¡Hola! Estoy lista 👋</p>
-                            {/* Triángulo del globo */}
                             <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white"></div>
                         </div>
                     </div>
@@ -661,7 +639,7 @@ export default function AsistenteFinalAzul() {
             </div>
         </div>
 
-        {/* 2. CONTENEDOR CHAT */}
+        {/* CONTENEDOR CHAT */}
         <div className="w-full flex-1 md:w-1/2 flex flex-col bg-white relative z-10 shadow-2xl overflow-hidden">
            <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
              {messages.length === 0 && (
@@ -672,7 +650,7 @@ export default function AsistenteFinalAzul() {
                  <h2 className="text-lg md:text-2xl font-bold text-gray-800 mb-1 md:mb-3">¡Hola! Soy tu asistente</h2>
                  <p className="text-xs md:text-base text-gray-600 mb-4 max-w-md mx-auto px-2">Estoy entrenado con los reglamentos oficiales.</p>
                  <div className="grid grid-cols-1 gap-2 md:gap-3 max-w-md mx-auto px-4">
-                   {['¿Cómo solicito una recalificación?', '¿Proceso de titulación?', '¿Cómo estudio en la UG?'].map((q, i) => (
+                   {['¿Cómo solicito una recalificación?', '¿Proceso de titulación?', '¿Cómo estudio en la Universidad?'].map((q, i) => (
                      <button key={i} onClick={() => handleSubmit(q)} className="p-2 md:p-4 bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition text-center text-xs md:text-sm text-gray-700 truncate">
                        {q}
                      </button>
@@ -685,6 +663,22 @@ export default function AsistenteFinalAzul() {
                  <div className={`max-w-[85%] md:max-w-md p-3 md:p-4 rounded-2xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}`}>
                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(msg.content)}</p>
                    {msg.source && (<p className="text-xs mt-3 pt-2 border-t border-gray-100 opacity-70 italic flex items-center gap-1"><BookOpen size={10}/> Fuente: {msg.source}</p>)}
+                   
+                   {/* --- ✨ SECCIÓN DE SUGERENCIAS INTELIGENTES ✨ --- */}
+                   {msg.suggestions && msg.suggestions.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                            {msg.suggestions.map((sug, idx) => (
+                                <button 
+                                    key={idx} 
+                                    onClick={() => handleSubmit(sug)} 
+                                    className="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1.5 rounded-full hover:bg-blue-100 hover:scale-105 transition transform cursor-pointer font-medium"
+                                >
+                                    ✨ {sug}
+                                </button>
+                            ))}
+                        </div>
+                   )}
+
                    <p className={`text-[10px] mt-2 text-right ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>{msg.time}</p>
                  </div>
                </div>
