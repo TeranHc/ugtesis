@@ -8,7 +8,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    // 🔒 PROTECCIÓN: VALIDACIÓN DE SESIÓN
+    // -----------------------------------------------------------------------
+    // 1. SEGURIDAD: Validar sesión real del usuario (Mejor que x-secret-key)
+    // -----------------------------------------------------------------------
     const authHeader = req.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
 
@@ -24,7 +26,9 @@ export async function POST(req) {
     
     const verifiedUserId = user.id
 
-    // 🛡️ VALIDACIONES BÁSICAS
+    // -----------------------------------------------------------------------
+    // 2. CONFIGURACIÓN
+    // -----------------------------------------------------------------------
     const apiKey = process.env.GEMINI_API_KEY || ""
     const body = await req.json()
     const { message, history } = body 
@@ -33,12 +37,12 @@ export async function POST(req) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
 
-    // 🧠 FASE 1: EMBEDDING
+    // A. Embedding (Convertir texto a números)
     const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
     const embeddingResult = await embeddingModel.embedContent(message)
     const vectorUsuario = embeddingResult.embedding.values
 
-    // 🔍 FASE 2: BÚSQUEDA SEMÁNTICA
+    // B. Búsqueda en Base de Conocimiento
     const { data: documentos } = await supabase
       .rpc('match_documents', {
         query_embedding: vectorUsuario, 
@@ -46,23 +50,21 @@ export async function POST(req) {
         match_count: 5 
       })
 
-    // --- DETECCIÓN DE CONTEXTO ---
     const hayInformacion = documentos && documentos.length > 0;
     
     let contexto = "";
-    let sourceLabel = "";
+    let sourceLabel = "Conocimiento General";
 
     if (hayInformacion) {
       contexto = documentos.map(doc => 
-        `-- REGLAMENTO: ${doc.titulo} (${doc.categoria}) --\n${doc.contenido}\n`
+        `-- FUENTE: ${doc.titulo} (${doc.categoria}) --\n${doc.contenido}\n`
       ).join('\n\n');
       sourceLabel = "Reglamento Oficial";
-    } else {
-      contexto = ""; 
-      sourceLabel = "Sin información oficial";
     }
 
-    // --- 🤖 FASE 3: GENERACIÓN (JSON MODE) ---
+    // -----------------------------------------------------------------------
+    // 3. GENERACIÓN DE RESPUESTA (Con instrucciones de formato)
+    // -----------------------------------------------------------------------
     const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash",
         generationConfig: { responseMimeType: "application/json" } 
@@ -70,46 +72,59 @@ export async function POST(req) {
     
     const historialTexto = history ? history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n') : "";
 
-    // --- 🔥 PROMPT CON RESTRICCIÓN DE SUGERENCIAS 🔥 ---
-    const prompt = `
-      Eres Mary AI, asistente oficial de la Universidad de Guayaquil.
+const prompt = `
+      Eres Mary AI, la asistente académica oficial y experta de la Universidad de Guayaquil.
       
-      ESTADO DE INFORMACIÓN: ${hayInformacion ? "✅ DATOS ENCONTRADOS" : "❌ DATOS NO ENCONTRADOS"}
+      TU OBJETIVO:
+      Proporcionar una respuesta COMPLETA, DETALLADA y ESTRUCTURADA basándote EXCLUSIVAMENTE en el contexto recuperado.
+      NO des respuestas cortas o simplistas de un solo párrafo si hay información para desarrollar.
+
+      ESTADO DE DATOS: ${hayInformacion ? "✅ INFORMACIÓN ENCONTRADA" : "❌ NO HAY INFORMACIÓN EN LA BASE DE DATOS"}
       
-      CONTEXTO RECUPERADO (SOLO PUEDES USAR ESTO):
+      CONTEXTO RECUPERADO (Toda tu respuesta debe salir de aquí):
       ${contexto}
       
-      HISTORIAL: ${historialTexto}
-      PREGUNTA: "${message}"
+      HISTORIAL DE CHAT: ${historialTexto}
+      PREGUNTA DEL USUARIO: "${message}"
 
-      TU MISIÓN:
-      Responder la pregunta y sugerir 3 dudas siguientes.
-      
-      ⚠️ REGLA DE ORO PARA SUGERENCIAS (MUY IMPORTANTE):
-      1. Las 'sugerencias' deben estar basadas 100% en el CONTEXTO RECUPERADO. 
-      2. NO sugieras temas que no aparezcan en el texto de arriba. Si el texto habla de 'Matrículas', sugiere 'Fechas de matrícula', NO sugieras 'Becas' si no hay texto de becas.
-      3. Si NO hay información (Estado ❌), tus sugerencias deben ser SOLO: ["¿Qué reglamentos tienes?", "¿Horarios de atención?", "¿Ubicación de secretaría?"].
-      4. Si SÍ hay información, sugiere detalles profundos que estén en ese mismo texto (ej: plazos, artículos relacionados, requisitos mencionados).
+      INSTRUCCIONES DE RESPUESTA (IMPORTANTE):
+      1. **ESTRUCTURA**: Usa formato Markdown para organizar la respuesta. Usa títulos (### Título) para separar secciones y negritas (**texto**) para resaltar conceptos clave.
+      2. **DETALLE**: Si el texto habla de un proceso, requisitos o modalidades, DESGLÓSALOS en una lista con viñetas (- elemento) para que sea fácil de leer.
+      3. **EXTENSIÓN**: Explica el "cómo", el "qué" y el "dónde" si el texto lo dice. Tu respuesta debe ser profesional y educativa.
+      4. **CITAS**: Menciona explícitamente el artículo o reglamento (ej: "Según el Art. 7...") cuando sea pertinente.
+      5. **SI NO HAY DATOS**: Di amablemente que no tienes información sobre ese tema específico en tus reglamentos actuales, no inventes.
+
+      INSTRUCCIONES PARA SUGERENCIAS:
+      1. Sugiere 3 preguntas que profundicen en el tema encontrado (ej: "¿Cuáles son los requisitos?", "¿Plazos de entrega?").
+      2. Solo sugiere cosas que sepas responder con el contexto que tienes.
 
       FORMATO JSON OBLIGATORIO:
       {
-        "respuesta": "Texto de respuesta amable, citando artículos si existen...",
-        "sugerencias": ["Sugerencia Segura 1", "Sugerencia Segura 2", "Sugerencia Segura 3"]
+        "respuesta": "Aquí va tu respuesta detallada en Markdown (con ###, **, - listados)...",
+        "sugerencias": ["Pregunta Profunda 1", "Pregunta Profunda 2", "Pregunta Profunda 3"]
       }
     `
 
     const result = await model.generateContent(prompt)
     const jsonResponse = JSON.parse(result.response.text());
     
-    // 💾 FASE 4: GUARDADO DE LOGS
+    // -----------------------------------------------------------------------
+    // 4. GUARDADO DE LOGS (Corregido: Sin columna 'tiene_contexto')
+    // -----------------------------------------------------------------------
     if (verifiedUserId) {
-       await supabase.from('logs_consultas').insert([{
-        usuario_id: verifiedUserId,
-        pregunta: message,
-        respuesta_bot: jsonResponse.respuesta, 
-        embedding: vectorUsuario,
-        tiene_contexto: hayInformacion
-      }])
+        // Usamos el Service Role para asegurar que se guarde el log sí o sí
+        const supabaseAdmin = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+        )
+        
+        await supabaseAdmin.from('logs_consultas').insert([{
+            usuario_id: verifiedUserId,
+            pregunta: message,
+            respuesta_bot: jsonResponse.respuesta, 
+            embedding: vectorUsuario
+            // Eliminé 'tiene_contexto' para que no te de error
+        }])
     }
 
     return NextResponse.json({ 
@@ -119,7 +134,7 @@ export async function POST(req) {
     })
 
   } catch (error) {
-    console.error(error)
+    console.error("Error API:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+// IMPORTANTE: Importamos ReactMarkdown para traducir los ### y **
+import ReactMarkdown from 'react-markdown'; 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -14,7 +16,6 @@ export default function AsistenteFinalAzul() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [emotion, setEmotion] = useState('neutral')
   const [userEmail, setUserEmail] = useState('')
   const [userId, setUserId] = useState(null)
   const [isListening, setIsListening] = useState(false)
@@ -105,6 +106,8 @@ export default function AsistenteFinalAzul() {
   // --- SEGURIDAD DE AUDIO AL RECARGAR/SALIR ---
   useEffect(() => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
+        // Precargar voces
+        window.speechSynthesis.getVoices();
         window.speechSynthesis.cancel();
     }
     return () => {
@@ -133,13 +136,7 @@ export default function AsistenteFinalAzul() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isLoading])
 
-  const formatMessage = (text) => {
-    if (!text) return '';
-    const parts = text.split('**');
-    return parts.map((part, index) => 
-        index % 2 === 1 ? <strong key={index} className="font-bold text-blue-800">{part}</strong> : part
-    );
-  };
+  // HE ELIMINADO LA FUNCIÓN formatMessage() PORQUE YA NO LA NECESITAMOS
 
   useEffect(() => {
     speakingRef.current = isSpeaking;
@@ -164,7 +161,7 @@ export default function AsistenteFinalAzul() {
   }, [])
 
   const toggleVoice = () => {
-    if (!recognitionRef.current) return alert('Navegador no compatible')
+    if (!recognitionRef.current) return alert('Navegador no compatible con dictado por voz')
     if (!isListening && isSpeaking) stopSpeaking();
     if (isListening) {
       recognitionRef.current.stop()
@@ -175,12 +172,23 @@ export default function AsistenteFinalAzul() {
     }
   }
 
-  // --- VOZ (SALIDA): FRAGMENTACIÓN ---
+  // --- SELECTOR DE VOZ (MEJORADO) ---
+  const getBestVoice = (voices) => {
+    const femaleKeywords = ['Sabina', 'Paulina', 'Mónica', 'Monica', 'Helena', 'Laura', 'Google español', 'Google Spanish'];
+    const preciseFemale = voices.find(v => femaleKeywords.some(keyword => v.name.includes(keyword)));
+    if (preciseFemale) return preciseFemale;
+    const anyFemaleSounding = voices.find(v => v.lang.startsWith('es') && !['Jorge', 'Pablo', 'Diego', 'Raul'].some(m => v.name.includes(m)));
+    if (anyFemaleSounding) return anyFemaleSounding;
+    return voices.find(v => v.lang.startsWith('es'));
+  }
+
+  // --- VOZ (SALIDA) ---
   const speakText = (text) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
 
-    const cleanText = text.replace(/\*/g, '');
+    // Limpiamos los símbolos Markdown para que no los lea
+    const cleanText = text.replace(/[*#_\-]/g, ''); 
     const chunks = cleanText.match(/[^.?;!]+[.?;!]*|[^.?;!]+/g) || [cleanText];
     let currentChunk = 0;
 
@@ -192,18 +200,14 @@ export default function AsistenteFinalAzul() {
       }
 
       const utterance = new SpeechSynthesisUtterance(chunks[currentChunk].trim());
-      
       const voices = window.speechSynthesis.getVoices();
-      const spanishVoices = voices.filter(v => v.lang.includes('es'));
-      let femaleVoice = spanishVoices.find(v => 
-          v.name.includes('Sabina') || v.name.includes('Paulina') || v.name.includes('Google español')
-      );
+      const selectedVoice = getBestVoice(voices);
 
-      if (femaleVoice) utterance.voice = femaleVoice;
-      else if (spanishVoices.length > 0) utterance.voice = spanishVoices[0];
+      if (selectedVoice) utterance.voice = selectedVoice;
+      else if (voices.length > 0) utterance.voice = voices[0]; 
 
       utterance.rate = 1.0;
-      utterance.pitch = 1.1;
+      utterance.pitch = 1.05; 
       
       utterance.onstart = () => {
           setIsSpeaking(true);
@@ -211,9 +215,9 @@ export default function AsistenteFinalAzul() {
       };
       utterance.onend = () => {
           currentChunk++;
-          setTimeout(playNextChunk, 50); 
+          setTimeout(playNextChunk, 100); 
       };
-      utterance.onerror = () => {
+      utterance.onerror = (e) => {
           setIsSpeaking(false);
           speakingRef.current = false;
       };
@@ -232,7 +236,7 @@ export default function AsistenteFinalAzul() {
     }
   }
 
-  // --- SALUDO ROBUSTO ---
+  // --- SALUDO ---
   useEffect(() => {
     if (modelReady && !hasGreetedRef.current) {
         hasGreetedRef.current = true; 
@@ -273,7 +277,6 @@ export default function AsistenteFinalAzul() {
   // --- LÓGICA DE CÁMARA ---
   useEffect(() => {
     if (!controlsRef.current || !cameraRef.current) return;
-
     const controls = controlsRef.current;
     const camera = cameraRef.current;
     const isMobile = window.innerWidth < 768;
@@ -282,22 +285,16 @@ export default function AsistenteFinalAzul() {
         controls.enableZoom = false;
         controls.enableRotate = false;
         controls.enablePan = false; 
-        if (isMobile) {
-            camera.position.set(0, 1.65, 0.85); 
-        } else {
-            camera.position.set(0, 1.65, 1.0);  
-        }
+        if (isMobile) camera.position.set(0, 1.65, 0.85); 
+        else camera.position.set(0, 1.65, 1.0);  
         controls.target.set(0, 1.65, 0); 
         controls.update();
     } else {
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.enablePan = true; 
-        if (isMobile) {
-            camera.position.set(0, 1.55, 1.1); 
-        } else {
-            camera.position.set(0, 1.65, 1.2); 
-        }
+        if (isMobile) camera.position.set(0, 1.55, 1.1); 
+        else camera.position.set(0, 1.65, 1.2); 
         controls.target.set(0, 1.55, 0);
         controls.update();
     }
@@ -347,11 +344,8 @@ export default function AsistenteFinalAzul() {
     controls.enableZoom = false;
     controls.enableRotate = false;
     controls.enablePan = false;
-    if (isMobile) {
-        camera.position.set(0, 1.65, 0.85);
-    } else {
-        camera.position.set(0, 1.65, 1.0);
-    }
+    if (isMobile) camera.position.set(0, 1.65, 0.85);
+    else camera.position.set(0, 1.65, 1.0);
     controls.target.set(0, 1.65, 0); 
     controls.update();
 
@@ -361,9 +355,6 @@ export default function AsistenteFinalAzul() {
     const mainLight = new THREE.DirectionalLight(0xffeebb, 1.2); 
     mainLight.position.set(2, 3.5, 5); 
     mainLight.castShadow = true;
-    mainLight.shadow.bias = -0.0005;
-    mainLight.shadow.mapSize.width = 2048;
-    mainLight.shadow.mapSize.height = 2048;
     scene.add(mainLight);
 
     const fillLight = new THREE.HemisphereLight(0xddeeff, 0x252550, 1.3); 
@@ -393,12 +384,9 @@ export default function AsistenteFinalAzul() {
     particlesRef.current = particles;
 
     const loader = new GLTFLoader();
-    loader.load(
-      '/Mary3.glb', 
-      (gltf) => {
+    loader.load('/Mary3.glb', (gltf) => {
         const model = gltf.scene;
         faceMeshesRef.current = [];
-
         model.traverse((child) => {
             if (child.isMesh && child.morphTargetDictionary) {
                 if (Object.keys(child.morphTargetDictionary).some(key => key === 'mouthOpen')) {
@@ -406,18 +394,13 @@ export default function AsistenteFinalAzul() {
                 }
             }
         });
-
         model.scale.set(1, 1, 1); 
         model.position.set(0, 0, 0); 
-
         const mixer = new THREE.AnimationMixer(model);
         mixerRef.current = mixer;
-
         const animations = gltf.animations;
         if (animations && animations.length > 0) {
-            let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo');
-            if (!reposoClip) reposoClip = animations[0]; 
-
+            let reposoClip = THREE.AnimationClip.findByName(animations, 'reposo') || animations[0];
             const pensandoClip = THREE.AnimationClip.findByName(animations, 'pensando');
             const saludarClip = THREE.AnimationClip.findByName(animations, 'saludar');
             const respuestaClip = THREE.AnimationClip.findByName(animations, 'respuesta');
@@ -444,36 +427,26 @@ export default function AsistenteFinalAzul() {
                 actionsRef.current['respuesta'] = action;
             }
         }
-
         scene.add(model);
         characterRef.current = model;
         setModelReady(true);
-      },
-      undefined,
-      (error) => console.error('Error cargando modelo:', error)
+      }, undefined, (error) => console.error('Error cargando modelo:', error)
     );
 
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
       const delta = clockRef.current.getDelta();
-
       if (mixerRef.current) mixerRef.current.update(delta);
-      
       controls.update();
       if (particlesRef.current) particlesRef.current.rotation.y += 0.001;
 
       if (faceMeshesRef.current.length > 0) {
           faceMeshesRef.current.forEach((mesh) => {
               const index = mesh.morphTargetDictionary['mouthOpen'];
-              
               if (index !== undefined) {
                   if (speakingRef.current) {
                       const t = Date.now();
-                      let openValue = 
-                          (Math.sin(t * 0.02) * 0.5) + 
-                          (Math.sin(t * 0.01) * 0.3) + 
-                          (Math.random() * 0.2); 
-
+                      let openValue = (Math.sin(t * 0.02) * 0.5) + (Math.sin(t * 0.01) * 0.3) + (Math.random() * 0.2); 
                       openValue = Math.max(0, Math.min(0.8, openValue)); 
                       mesh.morphTargetInfluences[index] = openValue; 
                   } else {
@@ -483,7 +456,6 @@ export default function AsistenteFinalAzul() {
               }
           });
       }
-
       renderer.render(scene, camera);
     };
     animate();
@@ -504,39 +476,36 @@ export default function AsistenteFinalAzul() {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameRef.current);
       if(mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
-      
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
       renderer.dispose();
     };
   }, []);
 
-  // --- SUBMIT: CON TOKEN + HISTORIAL + SUGERENCIAS ---
+  // --- SUBMIT ---
   const handleSubmit = async (textOverride = null) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim()) return;
+    if (textToSend.length > 500) {
+        setMessages(prev => [...prev, { role: 'bot', content: "⚠️ El mensaje es demasiado largo. (máx 500 caracteres)." }]);
+        return;
+    }
 
     stopSpeaking();
-
+    const previousInput = input;
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
 
-    // Creamos el mensaje del usuario
     const userMsg = { 
         role: 'user', 
         content: textToSend, 
         time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) 
     };
 
-    // Actualizamos la vista inmediatamente
     setMessages(prev => [...prev, userMsg]);
     if (!textOverride) setInput('');
-    
     setIsLoading(true);
     
     try {
-        // Historial (Memoria)
         const chatHistory = messages.slice(-6).map(m => ({
             role: m.role === 'user' ? 'user' : 'model',
             parts: [{ text: m.content }]
@@ -548,11 +517,7 @@ export default function AsistenteFinalAzul() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}` 
             },
-            body: JSON.stringify({ 
-                message: textToSend, 
-                history: chatHistory, 
-                userId: userId 
-            })
+            body: JSON.stringify({ message: textToSend, history: chatHistory, userId: userId })
         });
         
         const data = await response.json();
@@ -562,14 +527,16 @@ export default function AsistenteFinalAzul() {
             role: 'bot', 
             content: data.response, 
             source: data.source,
-            suggestions: data.suggestions, // <--- GUARDAMOS LAS SUGERENCIAS DEL JSON
+            suggestions: data.suggestions,
             time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) 
         };
         setMessages(prev => [...prev, botMsg]);
         speakText(data.response);
 
     } catch (error) {
-        setMessages(prev => [...prev, { role: 'bot', content: "Error de conexión." }]);
+        console.error(error);
+        setMessages(prev => [...prev, { role: 'bot', content: "⚠️ Error de conexión." }]);
+        if (!textOverride) setInput(previousInput);
     } finally {
         setIsLoading(false);
     }
@@ -658,13 +625,38 @@ export default function AsistenteFinalAzul() {
                  </div>
                </div>
              )}
-             {messages.map((msg, i) => (
+{messages.map((msg, i) => (
                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                  <div className={`max-w-[85%] md:max-w-md p-3 md:p-4 rounded-2xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}`}>
-                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(msg.content)}</p>
+                   
+                   {/* ✅ CORRECCIÓN APLICADA: Colores dinámicos */}
+                   <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
+                       <ReactMarkdown
+                          components={{
+                            // Títulos: Blancos si es usuario, Azules si es bot
+                            h1: ({node, ...props}) => <h3 className={`text-lg font-bold mt-3 mb-2 ${msg.role === 'user' ? 'text-white' : 'text-blue-900'}`} {...props} />,
+                            h2: ({node, ...props}) => <h3 className={`text-base font-bold mt-3 mb-2 ${msg.role === 'user' ? 'text-white' : 'text-blue-900'}`} {...props} />,
+                            h3: ({node, ...props}) => <h3 className={`text-base font-bold mt-3 mb-2 ${msg.role === 'user' ? 'text-white' : 'text-blue-900'}`} {...props} />,
+                            
+                            // Negritas: Blancas si es usuario, Azul oscuro si es bot
+                            strong: ({node, ...props}) => <strong className={`font-bold ${msg.role === 'user' ? 'text-white' : 'text-blue-800'}`} {...props} />,
+                            
+                            // Listas: Blancas si es usuario, Grises si es bot
+                            ul: ({node, ...props}) => <ul className={`list-disc pl-5 space-y-1 my-2 ${msg.role === 'user' ? 'text-white' : 'text-gray-700'}`} {...props} />,
+                            ol: ({node, ...props}) => <ol className={`list-decimal pl-5 space-y-1 my-2 ${msg.role === 'user' ? 'text-white' : 'text-gray-700'}`} {...props} />,
+                            li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                            
+                            // Párrafos
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />
+                          }}
+                       >
+                           {msg.content}
+                       </ReactMarkdown>
+                   </div>
+                   {/* ----------------------------------------------------------- */}
+
                    {msg.source && (<p className="text-xs mt-3 pt-2 border-t border-gray-100 opacity-70 italic flex items-center gap-1"><BookOpen size={10}/> Fuente: {msg.source}</p>)}
                    
-                   {/* --- ✨ SECCIÓN DE SUGERENCIAS INTELIGENTES ✨ --- */}
                    {msg.suggestions && msg.suggestions.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                             {msg.suggestions.map((sug, idx) => (

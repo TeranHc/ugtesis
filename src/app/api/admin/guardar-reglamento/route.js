@@ -5,31 +5,70 @@ import { NextResponse } from 'next/server'
 
 export async function POST(req) {
   try {
+    // -----------------------------------------------------------------------
+    // 🔒 1. CAPA DE SEGURIDAD CRÍTICA (NUEVO)
+    // -----------------------------------------------------------------------
+    
+    // A. Obtener el token del header
+    const authHeader = req.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
+
+    if (!token) {
+      return NextResponse.json({ error: "No autorizado: Token faltante" }, { status: 401 })
+    }
+
+    // B. Cliente "Anónimo" solo para validar al usuario (Sin permisos de superadmin aún)
+    const supabaseAuth = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
+
+    // C. Verificar que el token sea válido en Supabase Auth
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: "Sesión inválida o expirada" }, { status: 401 })
+    }
+
+    // D. Verificar si el usuario tiene rol 'admin' en tu base de datos
+    const { data: perfil } = await supabaseAuth
+        .from('perfiles_usuarios')
+        .select('rol')
+        .eq('id', user.id)
+        .single()
+
+    if (perfil?.rol !== 'admin') {
+      console.warn(`Intento de acceso no autorizado por usuario: ${user.id}`)
+      return NextResponse.json({ error: "Acceso denegado: Requiere privilegios de administrador" }, { status: 403 })
+    }
+
+    // -----------------------------------------------------------------------
+    // ✅ 2. LÓGICA DE NEGOCIO (Solo se ejecuta si pasó la seguridad)
+    // -----------------------------------------------------------------------
+
     const { id, titulo, contenido, categoria, action } = await req.json()
 
-    // 1. Configuración
+    // Configuración de Gemini
     const apiKey = process.env.GEMINI_API_KEY
     const genAI = new GoogleGenerativeAI(apiKey)
 
-    // --- CORRECCIÓN AQUÍ ---
-    // createClient toma (URL, LLAVE). 
-    // Al poner aquí la SERVICE_ROLE_KEY, obtienes permisos de administrador total.
-    const supabase = createClient(
+    // AHORA SÍ: Inicializamos el cliente con PODERES TOTALES (Service Role)
+    // porque ya sabemos que es un admin real.
+    const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY 
     )
-    // -----------------------
 
-    // 2. GENERAR EL EMBEDDING
+    // Generar Embedding
     const model = genAI.getGenerativeModel({ model: "text-embedding-004" })
     const result = await model.embedContent(contenido)
     const vector = result.embedding.values
 
     let errorSupabase = null
 
-    // 3. Guardar en Supabase
+    // Guardar en Supabase usando el cliente Admin
     if (action === 'create') {
-      const { error } = await supabase.from('base_conocimiento').insert([{
+      const { error } = await supabaseAdmin.from('base_conocimiento').insert([{
         titulo,
         contenido,
         categoria,
@@ -38,7 +77,7 @@ export async function POST(req) {
       errorSupabase = error
     } 
     else if (action === 'update') {
-      const { error } = await supabase.from('base_conocimiento').update({
+      const { error } = await supabaseAdmin.from('base_conocimiento').update({
         titulo,
         contenido,
         categoria,

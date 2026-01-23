@@ -105,19 +105,44 @@ export default function AdminPage() {
   }
 
   const handleSaveReglamento = async () => {
+    // 1. Obtienes la sesión correctamente
+    const { data: { session } } = await supabase.auth.getSession() 
+
     if (!formData.titulo || !formData.categoria || !formData.contenido) return alert('Complete campos')
     setMensajeSistema('Generando vectores...')
+    
     try {
       const response = await fetch('/api/admin/guardar-reglamento', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingId, titulo: formData.titulo, categoria: formData.categoria, contenido: formData.contenido, action: editingId ? 'update' : 'create' })
+        // 2. CORRECCIÓN: 'Authorization' va DENTRO de headers
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}` // <--- AQUÍ ADENTRO
+        },
+        body: JSON.stringify({ 
+            id: editingId, 
+            titulo: formData.titulo, 
+            categoria: formData.categoria, 
+            contenido: formData.contenido, 
+            action: editingId ? 'update' : 'create' 
+        })
       })
-      if (!response.ok) throw new Error('Error al guardar')
-      await vaciarTodoElCache(); setMensajeSistema('Guardado correctamente.'); setFormData({ titulo: '', categoria: '', contenido: '' }); setEditingId(null); setCurrentView('lista'); await cargarDatos(); setTimeout(() => setMensajeSistema(null), 5000)
-    } catch (error) { alert('Error: ' + error.message); setMensajeSistema(null) }
-  }
 
+      if (!response.ok) throw new Error('Error al guardar')
+      
+      await vaciarTodoElCache(); 
+      setMensajeSistema('Guardado correctamente.'); 
+      setFormData({ titulo: '', categoria: '', contenido: '' }); 
+      setEditingId(null); 
+      setCurrentView('lista'); 
+      await cargarDatos(); 
+      setTimeout(() => setMensajeSistema(null), 5000)
+
+    } catch (error) { 
+        alert('Error: ' + error.message); 
+        setMensajeSistema(null) 
+    }
+  }
   const handleEdit = (reg) => {
     setFormData({ titulo: reg.titulo, categoria: reg.categoria, contenido: reg.contenido }); setEditingId(reg.id); setCurrentView('nuevo'); if (window.innerWidth < 768) setSidebarOpen(false)
   }
