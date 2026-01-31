@@ -6,10 +6,9 @@ import { NextResponse } from 'next/server'
 export async function POST(req) {
   try {
     // -----------------------------------------------------------------------
-    // 🔒 1. CAPA DE SEGURIDAD CRÍTICA (NUEVO)
+    // 🔒 1. CAPA DE SEGURIDAD CRÍTICA
     // -----------------------------------------------------------------------
     
-    // A. Obtener el token del header
     const authHeader = req.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
 
@@ -17,56 +16,62 @@ export async function POST(req) {
       return NextResponse.json({ error: "No autorizado: Token faltante" }, { status: 401 })
     }
 
-    // B. Cliente "Anónimo" solo para validar al usuario (Sin permisos de superadmin aún)
+    // A. Cliente para validar el TOKEN (Anon Key es suficiente aquí)
     const supabaseAuth = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     )
 
-    // C. Verificar que el token sea válido en Supabase Auth
     const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
     
     if (authError || !user) {
       return NextResponse.json({ error: "Sesión inválida o expirada" }, { status: 401 })
     }
 
-    // D. Verificar si el usuario tiene rol 'admin' en tu base de datos
-    const { data: perfil } = await supabaseAuth
-        .from('perfiles_usuarios')
-        .select('rol')
-        .eq('id', user.id)
-        .single()
-
-    if (perfil?.rol !== 'admin') {
-      console.warn(`Intento de acceso no autorizado por usuario: ${user.id}`)
-      return NextResponse.json({ error: "Acceso denegado: Requiere privilegios de administrador" }, { status: 403 })
-    }
-
-    // -----------------------------------------------------------------------
-    // ✅ 2. LÓGICA DE NEGOCIO (Solo se ejecuta si pasó la seguridad)
-    // -----------------------------------------------------------------------
-
-    const { id, titulo, contenido, categoria, action } = await req.json()
-
-    // Configuración de Gemini
-    const apiKey = process.env.GEMINI_API_KEY
-    const genAI = new GoogleGenerativeAI(apiKey)
-
-    // AHORA SÍ: Inicializamos el cliente con PODERES TOTALES (Service Role)
-    // porque ya sabemos que es un admin real.
+    // B. Cliente con PODERES TOTALES (Service Role)
+    // Lo inicializamos aquí para usarlo en la verificación del rol y saltar el RLS
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY 
     )
 
-    // Generar Embedding
+    // C. Verificar rol usando el cliente ADMIN (Esto corrige el error 403)
+    const { data: perfil, error: perfilError } = await supabaseAdmin
+        .from('perfiles_usuarios')
+        .select('rol')
+        .eq('id', user.id)
+        .single()
+
+    // Log para depuración en tu terminal
+    console.log(`Verificando usuario: ${user.id} | Rol en DB: ${perfil?.rol}`);
+
+    if (perfilError || perfil?.rol !== 'admin') {
+      console.warn(`Acceso denegado: El usuario ${user.id} tiene rol [${perfil?.rol}]`);
+      return NextResponse.json({ 
+        error: "Acceso denegado: Se requiere rol de administrador",
+        debug_rol: perfil?.rol 
+      }, { status: 403 })
+    }
+
+    // -----------------------------------------------------------------------
+    // ✅ 2. LÓGICA DE NEGOCIO (Solo si es Admin)
+    // -----------------------------------------------------------------------
+
+    const { id, titulo, contenido, categoria, action } = await req.json()
+
+    if (!contenido) throw new Error("El contenido es obligatorio para generar el vector")
+
+    // Configuración de Gemini
+    const apiKey = process.env.GEMINI_API_KEY
+    const genAI = new GoogleGenerativeAI(apiKey)
+
+    // Generar Embedding (Convertir texto a vector)
     const model = genAI.getGenerativeModel({ model: "text-embedding-004" })
     const result = await model.embedContent(contenido)
     const vector = result.embedding.values
 
     let errorSupabase = null
 
-    // Guardar en Supabase usando el cliente Admin
     if (action === 'create') {
       const { error } = await supabaseAdmin.from('base_conocimiento').insert([{
         titulo,

@@ -1,8 +1,10 @@
+// src/app/admin/page.js
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { BookOpen, MessageSquare, Plus, Edit2, Trash2, Search, LogOut, Menu, X, BarChart3, Clock, Save, AlertTriangle, Loader2, ChevronDown, Filter, Calendar } from 'lucide-react'
+// Agregamos ChevronLeft y ChevronRight para los botones de paginación
+import { BookOpen, MessageSquare, Plus, Edit2, Trash2, Search, LogOut, Menu, X, BarChart3, Clock, Save, AlertTriangle, Loader2, ChevronDown, Filter, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function AdminPage() {
   const router = useRouter()
@@ -13,6 +15,10 @@ export default function AdminPage() {
   const [reglamentos, setReglamentos] = useState([])
   const [logs, setLogs] = useState([])
   
+  // --- PAGINACIÓN (NUEVO) ---
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10 
+  
   // Gestión de Categorías
   const [listaCategorias, setListaCategorias] = useState([])
   const [showModalCategoria, setShowModalCategoria] = useState(false)
@@ -20,11 +26,9 @@ export default function AdminPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false) 
   const [nuevaCategoriaInput, setNuevaCategoriaInput] = useState('')
 
-  // Buscador y Filtros de Reglamentos
+  // Buscador y Filtros
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('Todas') 
-
-  // Filtros de Logs
   const [logTimeFilter, setLogTimeFilter] = useState('3días') 
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -46,18 +50,35 @@ export default function AdminPage() {
     checkAdmin()
   }, [])
 
+  // Reseteamos a la página 1 si cambiamos de filtro (UX Importante)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [logTimeFilter, currentView]);
+
   const cargarDatos = async () => {
-    const { data: regs } = await supabase.from('base_conocimiento').select('*').order('id', { ascending: false })
+    const { data: regs } = await supabase
+        .from('base_conocimiento')
+        .select('id, titulo, categoria, fecha_actualizacion')
+        .order('id', { ascending: false })
+    
     if (regs) {
       setReglamentos(regs)
       const categoriasBD = [...new Set(regs.map(r => r.categoria).filter(Boolean))]
       setListaCategorias(categoriasBD)
     }
-    const { data: logsData } = await supabase.from('logs_consultas').select('*').order('fecha', { ascending: false })
+
+    // AUMENTAMOS A 100 REGISTROS (Para que la paginación tenga sentido)
+    const { data: logsData } = await supabase
+        .from('logs_consultas')
+        .select('*')
+        .order('fecha', { ascending: false })
+        .range(0, 99) 
+    
     if (logsData) setLogs(logsData)
   }
 
   const highlightText = (text, highlight) => {
+    if (!text) return "";
     if (!highlight.trim()) return text;
     const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
     return (
@@ -71,6 +92,7 @@ export default function AdminPage() {
     );
   };
 
+  // --- LÓGICA DE FILTRADO ---
   const logsFiltrados = logs.filter(log => {
     const fechaLog = new Date(log.fecha);
     const ahora = new Date();
@@ -90,11 +112,24 @@ export default function AdminPage() {
     return true;
   });
 
+  // --- LÓGICA DE PAGINACIÓN ---
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentLogs = logsFiltrados.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(logsFiltrados.length / itemsPerPage);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
   const reglamentosFiltrados = reglamentos.filter(reg => {
     const matchesSearch = searchTerm === '' || 
       reg.titulo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.contenido?.toLowerCase().includes(searchTerm.toLowerCase());
+      reg.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) 
     const matchesCategory = filterCategory === 'Todas' || reg.categoria === filterCategory;
     return matchesSearch && matchesCategory;
   })
@@ -105,7 +140,6 @@ export default function AdminPage() {
   }
 
   const handleSaveReglamento = async () => {
-    // 1. Obtienes la sesión correctamente
     const { data: { session } } = await supabase.auth.getSession() 
 
     if (!formData.titulo || !formData.categoria || !formData.contenido) return alert('Complete campos')
@@ -114,10 +148,9 @@ export default function AdminPage() {
     try {
       const response = await fetch('/api/admin/guardar-reglamento', {
         method: 'POST',
-        // 2. CORRECCIÓN: 'Authorization' va DENTRO de headers
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}` // <--- AQUÍ ADENTRO
+            'Authorization': `Bearer ${session?.access_token}` 
         },
         body: JSON.stringify({ 
             id: editingId, 
@@ -130,7 +163,6 @@ export default function AdminPage() {
 
       if (!response.ok) throw new Error('Error al guardar')
       
-      await vaciarTodoElCache(); 
       setMensajeSistema('Guardado correctamente.'); 
       setFormData({ titulo: '', categoria: '', contenido: '' }); 
       setEditingId(null); 
@@ -143,8 +175,17 @@ export default function AdminPage() {
         setMensajeSistema(null) 
     }
   }
-  const handleEdit = (reg) => {
-    setFormData({ titulo: reg.titulo, categoria: reg.categoria, contenido: reg.contenido }); setEditingId(reg.id); setCurrentView('nuevo'); if (window.innerWidth < 768) setSidebarOpen(false)
+
+  const handleEdit = async (reg) => {
+    setMensajeSistema('Cargando contenido...');
+    const { data, error } = await supabase.from('base_conocimiento').select('contenido').eq('id', reg.id).single();
+    if (error || !data) { alert("Error cargando contenido"); setMensajeSistema(null); return; }
+
+    setFormData({ titulo: reg.titulo, categoria: reg.categoria, contenido: data.contenido }); 
+    setEditingId(reg.id); 
+    setCurrentView('nuevo'); 
+    setMensajeSistema(null);
+    if (window.innerWidth < 768) setSidebarOpen(false)
   }
 
   const solicitarBorrarLog = (id) => setDeleteModal({ show: true, type: 'single', id })
@@ -157,6 +198,7 @@ export default function AdminPage() {
     else if (deleteModal.type === 'single') ({ error } = await supabase.from('logs_consultas').delete().eq('id', deleteModal.id))
     else if (deleteModal.type === 'all') await vaciarTodoElCache()
     else if (deleteModal.type === 'all_reglamentos') ({ error } = await supabase.from('base_conocimiento').delete().gt('id', 0))
+    
     if (!error) { await cargarDatos(); setDeleteModal({ show: false, type: null, id: null }) } 
     else { alert('Error: ' + error.message) }
   }
@@ -250,10 +292,9 @@ export default function AdminPage() {
               <div className="p-4 border-b bg-gray-50 flex flex-col lg:flex-row gap-4">
                 <div className="flex-1 relative">
                   <Search className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-                  <input type="text" placeholder="Buscar por título, categoría o contenido..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-black" />
+                  <input type="text" placeholder="Buscar por título o categoría..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition text-black" />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
-                  {/* FILTRO CATEGORIA CORREGIDO */}
                   <div className="relative w-full sm:w-auto text-black font-sans font-bold">
                     <button onClick={() => setShowFilterDropdown(!showFilterDropdown)} className="w-full sm:w-64 flex items-center justify-between gap-2 bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm font-bold transition hover:border-gray-400">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -265,7 +306,6 @@ export default function AdminPage() {
                     {showFilterDropdown && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowFilterDropdown(false)}></div>
-                        {/* Alineación corregida: left-0 en móvil/mitad de pantalla para que no se corte a la izquierda */}
                         <div className="absolute left-0 lg:right-0 z-50 mt-1 w-full sm:w-80 lg:w-72 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto font-bold">
                           <button onClick={() => { setFilterCategory('Todas'); setShowFilterDropdown(false); }} className={`w-full text-left p-3 text-sm transition-colors border-b ${filterCategory === 'Todas' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}>Todas las Categorías</button>
                           {listaCategorias.map((cat, i) => (
@@ -293,7 +333,7 @@ export default function AdminPage() {
                             <span className="text-[10px] text-gray-400 flex items-center gap-1 font-sans font-bold"><Clock size={10}/> {new Date(reg.fecha_actualizacion).toLocaleDateString()}</span>
                           </div>
                           <h3 className="font-bold text-gray-800 text-base md:text-lg leading-tight font-sans">{highlightText(reg.titulo, searchTerm)}</h3>
-                          <p className="text-gray-600 text-xs md:text-sm mt-2 line-clamp-2 leading-relaxed font-sans">{highlightText(reg.contenido, searchTerm)}</p>
+                          <p className="text-gray-400 text-xs mt-1 italic">Contenido oculto (Editar para ver)</p>
                         </div>
                         <div className="flex gap-2 w-full md:w-auto md:opacity-0 md:group-hover:opacity-100 transition-opacity justify-end border-t md:border-t-0 pt-3 md:pt-0">
                           <button onClick={() => handleEdit(reg)} className="flex-1 md:flex-none p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-100 flex justify-center hover:bg-blue-100"><Edit2 className="w-4 h-4" /></button>
@@ -384,14 +424,37 @@ export default function AdminPage() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 text-black">
                 <div className="p-4 border-b bg-gray-50 flex justify-between items-center rounded-t-xl font-bold">
                   <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                    <MessageSquare size={18} /> Mostrando {logsFiltrados.length} consultas
+                    <MessageSquare size={18} /> Mostrando {currentLogs.length} de {logsFiltrados.length} consultas
                   </h3>
+                  
+                  {/* --- CONTROLES DE PAGINACIÓN --- */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 mr-2">
+                        Página {currentPage} de {totalPages || 1}
+                    </span>
+                    <button 
+                        onClick={prevPage} 
+                        disabled={currentPage === 1}
+                        className="p-1 rounded-lg border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                        <ChevronLeft size={18} />
+                    </button>
+                    <button 
+                        onClick={nextPage} 
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        className="p-1 rounded-lg border hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                        <ChevronRight size={18} />
+                    </button>
+                  </div>
+                  {/* -------------------------------- */}
+
                 </div>
                 <div className="divide-y divide-gray-100 text-black">
-                  {logsFiltrados.length === 0 ? (
-                    <div className="p-10 text-center text-gray-500 font-medium">Sin registros en este período</div>
+                  {currentLogs.length === 0 ? (
+                    <div className="p-10 text-center text-gray-500 font-medium">Sin registros recientes</div>
                   ) : (
-                    logsFiltrados.map((log) => (
+                    currentLogs.map((log) => (
                       <div key={log.id} className="p-4 md:p-6 hover:bg-gray-50 transition relative group">
                         <button onClick={() => solicitarBorrarLog(log.id)} className="absolute top-4 right-4 text-red-400 p-2 md:opacity-0 md:group-hover:opacity-100 transition"><Trash2 size={18} /></button>
                         <div className="flex flex-col gap-2">
@@ -400,7 +463,7 @@ export default function AdminPage() {
                             <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1 font-bold"><Calendar size={10}/> {new Date(log.fecha).toLocaleString()}</span>
                           </div>
                           <p className="font-bold text-gray-800 text-base font-bold">"{log.pregunta}"</p>
-                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-gray-700 mt-1 leading-relaxed font-bold">{log.respuesta_bot}</div>
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-gray-700 mt-1 leading-relaxed font-bold max-h-24 overflow-y-auto">{log.respuesta_bot}</div>
                         </div>
                       </div>
                     ))
