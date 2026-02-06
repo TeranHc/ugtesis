@@ -66,7 +66,7 @@ export async function POST(req) {
     const genAI = new GoogleGenerativeAI(apiKey)
 
     // Generar Embedding (Convertir texto a vector)
-    const model = genAI.getGenerativeModel({ model: "text-embedding-004" })
+    const model = genAI.getGenerativeModel({ model: "text-embedding-001" })
     const result = await model.embedContent(contenido)
     const vector = result.embedding.values
 

@@ -38,7 +38,7 @@ export async function POST(req) {
     const genAI = new GoogleGenerativeAI(apiKey)
 
     // A. Embedding (Convertir texto a números)
-    const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" })
+    const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-001" })
     const embeddingResult = await embeddingModel.embedContent(message)
     const vectorUsuario = embeddingResult.embedding.values
 
