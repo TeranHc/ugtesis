@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req) {
   try {
     // -----------------------------------------------------------------------
-    // 1. SEGURIDAD: Validar sesión real del usuario (Mejor que x-secret-key)
+    // 1. SEGURIDAD: Validar sesión real del usuario
     // -----------------------------------------------------------------------
     const authHeader = req.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
@@ -27,7 +27,7 @@ export async function POST(req) {
     const verifiedUserId = user.id
 
     // -----------------------------------------------------------------------
-    // 2. CONFIGURACIÓN
+    // 2. CONFIGURACIÓN Y GENERACIÓN DE EMBEDDING
     // -----------------------------------------------------------------------
     const apiKey = process.env.GEMINI_API_KEY || ""
     const body = await req.json()
@@ -50,7 +50,32 @@ export async function POST(req) {
 
     const vectorUsuario = embeddingResult.embedding.values;
 
-    // B. Búsqueda en Base de Conocimiento
+    // -----------------------------------------------------------------------
+    // 3. BÚSQUEDA EN CACHÉ (LOGS ANTERIORES)
+    // -----------------------------------------------------------------------
+    // Usamos tu función RPC 'buscar_similares' para ver si ya respondimos esto
+    const { data: cacheHit } = await supabase.rpc('buscar_similares', {
+        query_embedding: vectorUsuario,
+        match_threshold: 0.96, // Umbral alto para precisión en la caché
+        match_count: 1
+    });
+
+    if (cacheHit && cacheHit.length > 0) {
+        // Si hay coincidencia, devolvemos la respuesta guardada inmediatamente
+        return NextResponse.json({ 
+            response: cacheHit[0].respuesta_bot,
+            suggestions: [
+                "¿Puedes darme más detalles?", 
+                "¿Dónde encuentro esto?", 
+                "Gracias, Mary"
+            ],
+            source: "Respuesta rápida (Historial)"
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. BÚSQUEDA EN BASE DE CONOCIMIENTO (REGLAMENTOS)
+    // -----------------------------------------------------------------------
     const { data: documentos } = await supabase
       .rpc('match_documents', {
         query_embedding: vectorUsuario, 
@@ -71,7 +96,7 @@ export async function POST(req) {
     }
 
     // -----------------------------------------------------------------------
-    // 3. GENERACIÓN DE RESPUESTA (Con instrucciones de formato)
+    // 5. GENERACIÓN CON GEMINI (SI NO HUBO CACHÉ)
     // -----------------------------------------------------------------------
     const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash",
@@ -80,11 +105,11 @@ export async function POST(req) {
     
     const historialTexto = history ? history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n') : "";
 
-const prompt = `
+    const prompt = `
       Eres Mary AI, la asistente académica oficial y experta de la Universidad de Guayaquil.
       
       TU OBJETIVO:
-      Proporcionar una respuesta COMPLETA, DETALLADA y ESTRUCTURADA basándote EXCLUSIVAMENTE en el contexto recuperado.
+      Proporcionar una respuesta COMPLETA, DETALLLADA y ESTRUCTURADA basándote EXCLUSIVAMENTE en el contexto recuperado.
       NO des respuestas cortas o simplistas de un solo párrafo si hay información para desarrollar.
 
       ESTADO DE DATOS: ${hayInformacion ? "✅ INFORMACIÓN ENCONTRADA" : "❌ NO HAY INFORMACIÓN EN LA BASE DE DATOS"}
@@ -111,16 +136,15 @@ const prompt = `
         "respuesta": "Aquí va tu respuesta detallada en Markdown (con ###, **, - listados)...",
         "sugerencias": ["Pregunta Profunda 1", "Pregunta Profunda 2", "Pregunta Profunda 3"]
       }
-    `
+    `;
 
     const result = await model.generateContent(prompt)
     const jsonResponse = JSON.parse(result.response.text());
     
     // -----------------------------------------------------------------------
-    // 4. GUARDADO DE LOGS (Corregido: Sin columna 'tiene_contexto')
+    // 6. GUARDADO DE LOGS (PARA FUTURA CACHÉ)
     // -----------------------------------------------------------------------
     if (verifiedUserId) {
-        // Usamos el Service Role para asegurar que se guarde el log sí o sí
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -131,7 +155,6 @@ const prompt = `
             pregunta: message,
             respuesta_bot: jsonResponse.respuesta, 
             embedding: vectorUsuario
-            // Eliminé 'tiene_contexto' para que no te de error
         }])
     }
 
