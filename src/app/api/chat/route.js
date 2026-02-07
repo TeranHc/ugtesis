@@ -37,10 +37,18 @@ export async function POST(req) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
 
-    // A. Embedding (Convertir texto a números)
-    const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-001" })
-    const embeddingResult = await embeddingModel.embedContent(message)
-    const vectorUsuario = embeddingResult.embedding.values
+    const embeddingModel = genAI.getGenerativeModel(
+      { model: "gemini-embedding-001" },
+      { apiVersion: 'v1beta' }
+    );
+
+    const embeddingResult = await embeddingModel.embedContent({
+      content: { parts: [{ text: message }] },
+      taskType: "RETRIEVAL_QUERY",
+      outputDimensionality: 768, 
+    });
+
+    const vectorUsuario = embeddingResult.embedding.values;
 
     // B. Búsqueda en Base de Conocimiento
     const { data: documentos } = await supabase

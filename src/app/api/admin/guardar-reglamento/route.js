@@ -65,10 +65,20 @@ export async function POST(req) {
     const apiKey = process.env.GEMINI_API_KEY
     const genAI = new GoogleGenerativeAI(apiKey)
 
-    // Generar Embedding (Convertir texto a vector)
-    const model = genAI.getGenerativeModel({ model: "text-embedding-001" })
-    const result = await model.embedContent(contenido)
-    const vector = result.embedding.values
+    // Usamos los mismos nombres de variables en todo el bloque
+    const embeddingModel = genAI.getGenerativeModel(
+      { model: "gemini-embedding-001" },
+      { apiVersion: 'v1beta' }
+    );
+
+    const resultEmbedding = await embeddingModel.embedContent({
+      content: { parts: [{ text: contenido }] },
+      taskType: "RETRIEVAL_DOCUMENT",
+      outputDimensionality: 768, 
+    });
+
+    // Extraemos el vector del objeto correcto
+    const vector = resultEmbedding.embedding.values;
 
     let errorSupabase = null
 
