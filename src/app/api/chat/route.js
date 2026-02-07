@@ -50,27 +50,42 @@ export async function POST(req) {
 
     const vectorUsuario = embeddingResult.embedding.values;
 
+    // --- NUEVO: OBTENER CATEGORÍAS REALES DE LA BD PARA EL PROMPT ---
+    const { data: categoriasData } = await supabase
+      .from('base_conocimiento')
+      .select('categoria');
+    
+    const listaCategorias = [...new Set(categoriasData?.map(c => c.categoria))].filter(Boolean).join(', ');
+
     // -----------------------------------------------------------------------
     // 3. BÚSQUEDA EN CACHÉ (LOGS ANTERIORES)
     // -----------------------------------------------------------------------
-    // Usamos tu función RPC 'buscar_similares' para ver si ya respondimos esto
     const { data: cacheHit } = await supabase.rpc('buscar_similares', {
         query_embedding: vectorUsuario,
-        match_threshold: 0.96, // Umbral alto para precisión en la caché
+        match_threshold: 0.96, 
         match_count: 1
     });
 
     if (cacheHit && cacheHit.length > 0) {
-        // Si hay coincidencia, devolvemos la respuesta guardada inmediatamente
-        return NextResponse.json({ 
-            response: cacheHit[0].respuesta_bot,
-            suggestions: [
-                "¿Puedes darme más detalles?", 
-                "¿Dónde encuentro esto?", 
-                "Gracias, Mary"
-            ],
-            source: "Respuesta rápida (Historial)"
-        });
+        const respuestaPrevia = cacheHit[0].respuesta_bot;
+        
+        // VALIDACIÓN: Evitar que la caché devuelva un "No tengo información" si ahora el reglamento existe
+        const esRespuestaVacia = 
+            respuestaPrevia.includes("no dispongo de información") || 
+            respuestaPrevia.includes("no tengo información") ||
+            respuestaPrevia.includes("no puedo proporcionar detalles");
+
+        if (!esRespuestaVacia) {
+            return NextResponse.json({ 
+                response: respuestaPrevia,
+                suggestions: [
+                    "¿Puedes darme más detalles?", 
+                    "¿Qué otros temas conoces?", 
+                    "Gracias, Mary"
+                ],
+                source: "Respuesta rápida (Historial)"
+            });
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -108,10 +123,15 @@ export async function POST(req) {
     const prompt = `
       Eres Mary AI, la asistente académica oficial y experta de la Universidad de Guayaquil.
       
+      TEMAS Y REGLAMENTOS DISPONIBLES EN TU BASE DE DATOS:
+      ${listaCategorias || "Reglamentos generales de la universidad"}
+
       TU OBJETIVO:
       Proporcionar una respuesta COMPLETA, DETALLLADA y ESTRUCTURADA basándote EXCLUSIVAMENTE en el contexto recuperado.
       NO des respuestas cortas o simplistas de un solo párrafo si hay información para desarrollar.
 
+      INSTRUCCIÓN DE IDENTIDAD:
+      SOLO si el usuario te pregunta específicamente sobre tus funciones, qué información tienes, qué puedes hacer o qué reglamentos manejas, menciona que conoces los siguientes temas: (${listaCategorias}). Si la pregunta es sobre "cómo estudiar" o algún proceso académico, prioriza la información del contexto.
       ESTADO DE DATOS: ${hayInformacion ? "✅ INFORMACIÓN ENCONTRADA" : "❌ NO HAY INFORMACIÓN EN LA BASE DE DATOS"}
       
       CONTEXTO RECUPERADO (Toda tu respuesta debe salir de aquí):
