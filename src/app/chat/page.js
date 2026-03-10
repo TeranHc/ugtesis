@@ -630,7 +630,7 @@ export default function AsistenteFinalAzul() {
                  <div className={`max-w-[85%] md:max-w-md p-3 md:p-4 rounded-2xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'}`}>
                    
                    {/* ✅ CORRECCIÓN APLICADA: Colores dinámicos */}
-                   <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
+                   <div className={`text-sm leading-relaxed break-words overflow-hidden ${msg.role === 'user' ? 'text-white' : 'text-gray-800'}`}>
                        <ReactMarkdown
                           components={{
                             // Títulos: Blancos si es usuario, Azules si es bot
@@ -647,7 +647,7 @@ export default function AsistenteFinalAzul() {
                             li: ({node, ...props}) => <li className="pl-1" {...props} />,
                             
                             // Párrafos
-                            p: ({node, ...props}) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0 leading-relaxed break-words" {...props} />
                           }}
                        >
                            {msg.content}
