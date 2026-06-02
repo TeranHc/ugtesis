@@ -31,7 +31,7 @@ export async function POST(req) {
     // -----------------------------------------------------------------------
     const apiKey = process.env.GEMINI_API_KEY || ""
     const body = await req.json()
-    const { message, history } = body 
+    const { message, history, previousThoughtSignature } = body
 
     if (!message) return NextResponse.json({ response: "Pregunta vacía" })
 
@@ -114,7 +114,7 @@ export async function POST(req) {
     // 5. GENERACIÓN CON GEMINI (SI NO HUBO CACHÉ)
     // -----------------------------------------------------------------------
     const model = genAI.getGenerativeModel({ 
-        model: "gemini 3.1 Flash Lite",
+        model: "gemini-3.1-flash-lite",
         generationConfig: { responseMimeType: "application/json" } 
     })
     
@@ -158,8 +158,20 @@ export async function POST(req) {
       }
     `;
 
-    const result = await model.generateContent(prompt)
+    const requestConfig = {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+    };
+
+    if (previousThoughtSignature) {
+        requestConfig.thoughtSignature = previousThoughtSignature; 
+    } 
+    
+    // 1. Pasamos 'requestConfig' en lugar de 'prompt' para que lea la firma anterior
+    const result = await model.generateContent(requestConfig);
     const jsonResponse = JSON.parse(result.response.text());
+    
+    // 2. Declaramos la variable para extraer la nueva firma y evitar el error "undefined"
+    const newThoughtSignature = result.response.thoughtSignature || null;
     
     // -----------------------------------------------------------------------
     // 6. GUARDADO DE LOGS (PARA FUTURA CACHÉ)
@@ -168,21 +180,23 @@ export async function POST(req) {
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY
-        )
+        );
         
         await supabaseAdmin.from('logs_consultas').insert([{
             usuario_id: verifiedUserId,
             pregunta: message,
             respuesta_bot: jsonResponse.respuesta, 
-            embedding: vectorUsuario
-        }])
+            embedding: vectorUsuario,
+            firma_pensamiento: newThoughtSignature // <-- NUEVO: Guardamos la firma en BD
+        }]);
     }
 
     return NextResponse.json({ 
       response: jsonResponse.respuesta,
       suggestions: jsonResponse.sugerencias,
-      source: sourceLabel
-    })
+      source: sourceLabel,
+      thoughtSignature: newThoughtSignature // <-- NUEVO: Retornamos la firma al cliente
+    });
 
   } catch (error) {
     console.error("Error API:", error)

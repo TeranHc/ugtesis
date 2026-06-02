@@ -32,6 +32,8 @@ export default function AsistenteFinalAzul() {
 
   // ESTADO CÁMARA: True = Cámara Fija, False = Libre
   const [isCameraFixed, setIsCameraFixed] = useState(true)
+  // --- NUEVO: Estado para mantener el razonamiento de Gemini 3.1 ---
+  const [thoughtSignature, setThoughtSignature] = useState(null)
 
   // --- REFS ---
   const mountRef = useRef(null)
@@ -517,11 +519,21 @@ export default function AsistenteFinalAzul() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}` 
             },
-            body: JSON.stringify({ message: textToSend, history: chatHistory, userId: userId })
+            body: JSON.stringify({ 
+                message: textToSend, 
+                history: chatHistory, 
+                userId: userId,
+                previousThoughtSignature: thoughtSignature // <-- NUEVO: Enviamos la firma guardada
+            })
         });
         
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Error en la respuesta');
+
+        // --- NUEVO: Guardamos la firma recibida para la próxima petición ---
+        if (data.thoughtSignature !== undefined) {
+            setThoughtSignature(data.thoughtSignature);
+        }
 
         const botMsg = { 
             role: 'bot', 
