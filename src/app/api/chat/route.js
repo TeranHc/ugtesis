@@ -114,7 +114,7 @@ export async function POST(req) {
     // 5. GENERACIÓN CON GEMINI (SI NO HUBO CACHÉ)
     // -----------------------------------------------------------------------
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.0-flash",
+        model: "gemini 3.1 Flash Lite",
         generationConfig: { responseMimeType: "application/json" } 
     })
     
